@@ -24,6 +24,9 @@ struct UpdaterTests {
             cat response
             exit "$(cat status)"
         fi
+        echo progress:download
+        echo progress:build
+        sleep 0.3
         echo 'Test install failure'
         exit 1
         """.write(to: script, atomically: true, encoding: .utf8)
@@ -81,7 +84,10 @@ struct UpdaterTests {
 
         updater.install()
         precondition(updater.isInstalling)
+        for _ in 0..<200 where updater.installStep < 2 && updater.isInstalling { try await Task.sleep(for: .milliseconds(10)) }
+        precondition(updater.installStep == 2 && updater.message.contains("2/4"))
         for _ in 0..<200 where updater.isInstalling { try await Task.sleep(for: .milliseconds(10)) }
+        precondition(updater.installStep == 0)
         precondition(updater.installFailed && !updater.isInstalling)
         let installLog = try String(contentsOf: updater.logURL, encoding: .utf8)
         precondition(installLog.contains("Test install failure"))

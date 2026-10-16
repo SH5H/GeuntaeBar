@@ -845,12 +845,8 @@ struct LaunchLabel: View {
     @State private var rightClickMonitor: Any?
 
     var body: some View {
-        Label {
-            Text(model.menuTitle)
-        } icon: {
-            Image(nsImage: Self.progressImage(snapshot: model.snapshot))
-                .renderingMode(.original)
-        }
+        Image(nsImage: Self.progressImage(snapshot: model.snapshot))
+            .renderingMode(.original)
             .help(progressDescription)
             .accessibilityLabel("\(model.snapshot?.dayTitle ?? "오늘") 최소 근무시간 진행률 및 목표 초과 시간")
             .accessibilityValue(progressDescription)
@@ -867,6 +863,10 @@ struct LaunchLabel: View {
             .onDisappear {
                 if let rightClickMonitor { NSEvent.removeMonitor(rightClickMonitor) }
                 rightClickMonitor = nil
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AppUpdater.showProgressNotification)) { _ in
+                openWindow(id: "options")
+                NSApplication.shared.activate(ignoringOtherApps: true)
             }
             .onChange(of: model.hasSavedSession) { _, saved in
                 guard !model.isSigningOut else { return }
@@ -1014,6 +1014,9 @@ struct WorkOptionsWindow: View {
             Section("앱 업데이트") {
                 Toggle("새 버전 자동 확인", isOn: $updater.automaticChecks)
                 Text(updater.message).font(.caption).foregroundStyle(.secondary)
+                if updater.isInstalling {
+                    ProgressView(value: Double(updater.installStep), total: Double(AppUpdater.installSteps.count))
+                }
                 HStack {
                     Button("업데이트 확인") { Task { await updater.check() } }
                         .disabled(updater.isChecking || updater.isInstalling)

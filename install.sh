@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
+echo "progress:build"
 ./build.sh
 
 install_dir="${1:-$HOME/Applications}"
@@ -20,16 +21,19 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
+echo "progress:install"
 ditto '../Geuntae bar.app' "$staging/Geuntae bar.app"
 codesign --verify --strict "$staging/Geuntae bar.app"
 
+echo "progress:restart"
 user_id="$(id -u)"
-pkill -u "$user_id" -x 'Geuntae bar' || [ "$?" -eq 1 ]
+# -a: during an in-app update this script descends from the running app, which pkill skips by default.
+pkill -a -u "$user_id" -x 'Geuntae bar' || [ "$?" -eq 1 ]
 for attempt in 1 2 3 4 5; do
-    if ! pgrep -u "$user_id" -x 'Geuntae bar' >/dev/null; then break; fi
+    if ! pgrep -a -u "$user_id" -x 'Geuntae bar' >/dev/null; then break; fi
     sleep 1
 done
-if pgrep -u "$user_id" -x 'Geuntae bar' >/dev/null; then
+if pgrep -a -u "$user_id" -x 'Geuntae bar' >/dev/null; then
     echo "Quit Geuntae bar and run this script again." >&2
     exit 1
 fi

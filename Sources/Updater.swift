@@ -15,6 +15,9 @@ final class AppUpdater: ObservableObject {
     @Published private(set) var isChecking = false
     @Published private(set) var isInstalling = false
     @Published private(set) var installFailed = false
+    /// Current install step (1-based) from the scripts' `progress:` lines; 0 before the first step.
+    @Published private(set) var installStep = 0
+    nonisolated static let installSteps = [("download", "새 버전 받는 중"), ("build", "빌드 중"), ("install", "설치 중"), ("restart", "재시작 중")]
     let logURL: URL
 
     private let appURL: URL
@@ -102,33 +105,52 @@ final class AppUpdater: ObservableObject {
             try Data().write(to: logURL, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logURL.path)
             let log = try FileHandle(forWritingTo: logURL)
-            defer { try? log.close() }
+            let output = Pipe()
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [scriptURL.path, "install", appURL.path]
-            process.standardOutput = log
-            process.standardError = log
-            process.terminationHandler = { [weak self] process in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.installer = nil
-                    self.isInstalling = false
-                    if process.terminationStatus != 0 {
-                        self.installFailed = true
-                        self.message = "업데이트에 실패했어요. 로그를 확인한 뒤 다시 시도해주세요."
-                    } else {
-                        await self.check()
-                    }
-                }
-            }
+            process.standardOutput = output
+            process.standardError = output
             try process.run()
+            try? output.fileHandleForWriting.close()
             installer = process
             isInstalling = true
             installFailed = false
-            message = "새 버전을 준비하고 있어요. 완료되면 앱이 재시작됩니다."
+            installStep = 0
+            message = "업데이트를 시작하고 있어요. 완료되면 앱이 재시작됩니다."
+            Task.detached { [weak self] in
+                // Read to EOF before reporting the result so the log is complete.
+                do {
+                    for try await line in output.fileHandleForReading.bytes.lines {
+                        log.write(Data((line + "\n").utf8))
+                        guard let step = Self.installSteps.firstIndex(where: { "progress:" + $0.0 == line }) else { continue }
+                        await self?.showInstallStep(step + 1)
+                    }
+                } catch {}
+                try? log.close()
+                process.waitUntilExit()
+                await self?.finishInstall(status: process.terminationStatus)
+            }
         } catch {
             installFailed = true
             message = "업데이트를 시작하지 못했어요: \(error.localizedDescription)"
+        }
+    }
+
+    private func showInstallStep(_ step: Int) {
+        installStep = step
+        message = "업데이트 \(step)/\(Self.installSteps.count) · \(Self.installSteps[step - 1].1)…"
+    }
+
+    private func finishInstall(status: Int32) async {
+        installer = nil
+        isInstalling = false
+        installStep = 0
+        if status != 0 {
+            installFailed = true
+            message = "업데이트에 실패했어요. 로그를 확인한 뒤 다시 시도해주세요."
+        } else {
+            await check()
         }
     }
 
@@ -136,8 +158,12 @@ final class AppUpdater: ObservableObject {
     private func promptToInstall(revision: String) async {
         guard defaults.string(forKey: "lastPromptedAppRevision") != revision else { return }
         defaults.set(revision, forKey: "lastPromptedAppRevision")
-        if await confirmInstall(revision) { install() }
+        guard await confirmInstall(revision) else { return }
+        install()
+        // Accepted from the alert: open the options window so the progress is visible.
+        NotificationCenter.default.post(name: Self.showProgressNotification, object: nil)
     }
+    static let showProgressNotification = Notification.Name("GeuntaeBarShowUpdateProgress")
 
     static func askToInstall(_ revision: String) async -> Bool {
         NSApplication.shared.activate(ignoringOtherApps: true)

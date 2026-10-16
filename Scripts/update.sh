@@ -27,6 +27,7 @@ fi
 update_dir="$(mktemp -d "${TMPDIR:-/tmp}/geuntae-bar-update.XXXXXX")"
 trap 'rm -rf "$update_dir"' EXIT
 trap 'exit 1' HUP INT TERM
+[ "$mode" = check ] || echo "progress:download"
 git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 \
     clone --quiet --single-branch --branch main "$repository" "$update_dir/source"
 latest="$(git -C "$update_dir/source" rev-parse HEAD)"

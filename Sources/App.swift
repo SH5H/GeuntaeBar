@@ -1179,21 +1179,24 @@ struct MonthSummary: View {
             let liveValue = snapshot.liveWorkClock == nil ? "" :
                 ", 확정 \(AttendanceSnapshot.duration(snapshot.month.creditedMinutes)), 진행 중 \(AttendanceSnapshot.duration(max(0, month.creditedMinutes - snapshot.month.creditedMinutes)))"
             let pace = snapshot.paceDifferenceMinutes
+            // Markdown: rendered with LocalizedStringKey so the remaining and average values are bold.
+            let remaining = { (minutes: Int) in
+                "**\(AttendanceSnapshot.duration(minutes))** (하루 평균 **" +
+                    (snapshot.dailyAverage(for: minutes).map(AttendanceSnapshot.duration) ?? "--") + "**)"
+            }
             let markers: [(position: Double?, color: Color, description: String)] = [
                 (range > 0 ? Double(snapshot.expectedMinutesByNow) / Double(range) : 0, .red,
                  "최소 목표 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
                  "\(AttendanceSnapshot.duration(abs(pace))) \(pace >= 0 ? "앞섬" : "부족")"),
                 (range > 0 ? Double(month.targetMinutes) / Double(range) : 0, .blue,
-                 "필수 \(AttendanceSnapshot.duration(month.targetMinutes)) · " +
-                 (month.balance >= 0
-                  ? "\(AttendanceSnapshot.duration(month.balance)) 초과"
-                  : "\(AttendanceSnapshot.duration(month.remainingMinutes)) 남음")),
+                 month.balance >= 0
+                  ? "필수 근무시간 - \(AttendanceSnapshot.duration(month.balance)) 초과"
+                  : "필수 근무시간 - \(remaining(month.remainingMinutes))"),
                 (compensation.map { range > 0 ? Double($0.thresholdMinutes) / Double(range) : 0 }, .purple,
                  compensation.map {
-                     "수당 기준 \(AttendanceSnapshot.duration($0.thresholdMinutes)) · " +
-                     ($0.remainingMinutes > 0
-                      ? "\(AttendanceSnapshot.duration($0.remainingMinutes)) 남음"
-                      : "\(AttendanceSnapshot.duration($0.excessMinutes)) 초과")
+                     $0.remainingMinutes > 0
+                      ? "수당 기준 - \(remaining($0.remainingMinutes))"
+                      : "수당 기준 - \(AttendanceSnapshot.duration($0.excessMinutes)) 초과"
                  } ?? "수당 기준 확인 불가")
             ]
             HStack {
@@ -1205,12 +1208,6 @@ struct MonthSummary: View {
             Text("누적 \(AttendanceSnapshot.duration(month.actualMinutes)) · 남은 근무일 \(snapshot.remainingWorkDays)일")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let pace = snapshot.requiredPace {
-                Text(pace.remainingMinutes == 0 ? "필수시간을 채웠어요"
-                     : pace.days == 0 ? "남은 근무일 없음 · \(AttendanceSnapshot.duration(pace.remainingMinutes)) 부족"
-                     : "필수까지 \(AttendanceSnapshot.duration(pace.remainingMinutes)) · \(pace.days)일 동안 하루 평균 \(AttendanceSnapshot.duration(pace.dailyMinutes))")
-                    .font(.caption.weight(.semibold))
-            }
             WorkProgressBar(fill: meter.fillFraction, markers: markers,
                             value: "필수시간 반영 \(AttendanceSnapshot.duration(month.creditedMinutes)), 필수시간 대비 \(snapshot.monthMeter.percent)%" + liveValue,
                             label: "월간 누적 근무시간", confirmedFill: confirmedMeter.fillFraction,
@@ -1221,7 +1218,7 @@ struct MonthSummary: View {
                         .font(.system(size: 8))
                         .foregroundStyle(markers[index].color)
                         .accessibilityHidden(true)
-                    Text(markers[index].description)
+                    Text(LocalizedStringKey(markers[index].description))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.caption)
@@ -1306,6 +1303,6 @@ struct WorkProgressBar: View {
         .frame(height: 14)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
-        .accessibilityValue(([value] + markers.map(\.description)).joined(separator: ", "))
+        .accessibilityValue(([value] + markers.map { $0.description.replacingOccurrences(of: "**", with: "") }).joined(separator: ", "))
     }
 }

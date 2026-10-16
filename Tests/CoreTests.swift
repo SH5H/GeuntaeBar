@@ -273,11 +273,10 @@ struct CoreTests {
                                         remainingWorkDays: 0, updatedAt: evening)
         precondition(noDays.minimumTodayMeter == nil && noDays.minimumTodayFill == 0)
         precondition(noDays.minimumTodayOvertimeMinutes == 0)
-        let unevenPace = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
-                                            remainingWorkDays: 2, updatedAt: morning).requiredPace!
-        precondition(unevenPace.remainingMinutes == 721 && unevenPace.days == 2 && unevenPace.dailyMinutes == 361)
-        precondition(achieved.requiredPace?.remainingMinutes == 0)
-        precondition(noDays.requiredPace?.days == 0 && noDays.requiredPace?.dailyMinutes == noDays.requiredPace?.remainingMinutes)
+        let unevenSnapshot = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
+                                                remainingWorkDays: 2, updatedAt: morning)
+        precondition(unevenSnapshot.dailyAverage(for: 721) == 361)
+        precondition(noDays.dailyAverage(for: 480) == nil)
         precondition(snapshot.menuTitle == "근무 2시간 30분")
         precondition(AttendanceSnapshot.clock(record.scheduledEnd) == "18:00")
         precondition(AttendanceSnapshot.clock("2026-09-29 18:00:00") == "18:00")

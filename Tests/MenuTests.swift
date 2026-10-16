@@ -279,8 +279,8 @@ struct MenuTests {
         precondition(texts.contains { $0.contains("출근09:00") })
         precondition(texts.contains { $0.contains("예상퇴근18:00") })
         precondition(texts.joined().contains("최소목표122시간0분"))
-        precondition(texts.joined().contains("필수128시간0분"))
-        precondition(texts.joined().contains("수당기준136시간0분"))
+        precondition(texts.joined().contains("필수근무시간-") && texts.joined().contains("(하루평균"))
+        precondition(texts.joined().contains("수당기준-"))
         precondition(texts.contains { $0.contains("필수시간대비94%") })
         precondition(texts.contains { $0.contains("최대160시간0분") })
         let barY = (0..<bitmap.pixelsHigh).first { filled(bitmap, x: 40, y: $0) }!
@@ -334,7 +334,7 @@ struct MenuTests {
 
         let (overlapBitmap, overlapTexts) = try await render(working, refreshDay: false, name: "overlapping-markers")
         let overlapY = monthBarY(overlapBitmap, after: barY)
-        precondition(overlapTexts.joined().contains("수당기준128시간0분"))
+        precondition(overlapTexts.joined().contains("수당기준-"))
         precondition(marker(overlapBitmap, minutes: 7680, range: 9600, y: overlapY, color: .systemBlue))
         precondition(marker(overlapBitmap, minutes: 7680, range: 9600, y: overlapY, color: .systemPurple))
 
@@ -363,7 +363,7 @@ struct MenuTests {
                                      dailyRequiredMinutes: 480, startDate: date, endDate: "2026-10-31",
                                      maximumWorkMinutes: nil)
         let (allZeroBitmap, allZeroTexts) = try await render(before, report: zeroMonth, refreshDay: false, name: "all-zero")
-        precondition(allZeroTexts.joined().contains("필수0시간0분"))
+        precondition(allZeroTexts.joined().contains("필수근무시간-0시간0분"))
         // All three markers share the start of a zero-length range.
         let markerRows = (0..<allZeroBitmap.pixelsHigh).filter {
             let pixel = allZeroBitmap.colorAt(x: 32, y: $0)!.usingColorSpace(.deviceRGB)!

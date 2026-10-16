@@ -440,12 +440,11 @@ struct AttendanceSnapshot {
         let target = Int(ceil(Double(remainingBeforeToday) / Double(days)))
         return WorkMeter(actualMinutes: todayMinutes, targetMinutes: target)
     }
-    /// Required minutes still owed (live) and the daily average needed over the remaining workdays.
-    var requiredPace: (days: Int, remainingMinutes: Int, dailyMinutes: Int)? {
-        guard attendanceKnown else { return nil }
+    /// Daily average needed to work `remainingMinutes` over the remaining workdays; nil without workdays.
+    func dailyAverage(for remainingMinutes: Int) -> Int? {
         let days = remainingDaysIncludingToday
-        let remaining = max(0, month.targetMinutes - displayMonth.creditedMinutes)
-        return (days, remaining, days > 0 ? Int(ceil(Double(remaining) / Double(days))) : remaining)
+        guard attendanceKnown, days > 0 else { return nil }
+        return Int(ceil(Double(remainingMinutes) / Double(days)))
     }
     var minimumTodayFill: Double {
         guard let meter = minimumTodayMeter else { return 0 }

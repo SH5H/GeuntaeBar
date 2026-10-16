@@ -1,0 +1,1260 @@
+{
+  "identity": {
+    "currentUser": {
+      "user": {
+        "userIdHash": "user-1",
+        "customerIdHash": "company-1"
+      }
+    }
+  },
+  "period": {
+    "period": {
+      "zoneId": "Asia/Seoul",
+      "from": "2026-10-01",
+      "to": "2026-10-31",
+      "applyTimeRangeFrom": 1790780400000,
+      "applyTimeRangeTo": 1793458800000
+    }
+  },
+  "summary": {
+    "userIdHash": "user-1",
+    "result": {
+      "timezone": "Asia/Seoul",
+      "period": {
+        "from": 1790780400000,
+        "to": 1793458800000
+      },
+      "currentTargetWorkingMinutes": 3770,
+      "totalOverWorkingMinutes": 430,
+      "totalRecognizedWorkingMinutes": 4200,
+      "requiredMaxStatutoryWorkingMinutes": 13812,
+      "maxRemainingWorkingMinutes": 9612,
+      "totalTimeOffMinutes": 0,
+      "requiredAgreedWorkingMinutes": 9600,
+      "maxRemainingStatutoryWorkingMinutesInWorkingPeriod": 9612,
+      "timeOffUseResultsByTimeOffPolicies": [],
+      "legalWorkMinutesCollection": {
+        "normalWorkMinutes": 3621,
+        "regardedOverWorkMinutes": 0,
+        "regardedOverNightWorkMinutes": 0,
+        "overWorkMinutes": 0,
+        "nightWorkMinutes": 149,
+        "holidayWorkMinutes": 388,
+        "overNightWorkMinutes": 0,
+        "holidayOverWorkMinutes": 0,
+        "holidayNightWorkMinutes": 42,
+        "holidayOverNightWorkMinutes": 0
+      }
+    },
+    "resultForFullFlexible": {
+      "requiredWorkingMinutes": 5830,
+      "remainingDaysByEndDateOfWorkingPeriod": 20,
+      "recommendDailyWorkingMinutes": 292,
+      "remainingOverWorkingMinutes": 3782,
+      "inSufficientWorkingMinutesWarning": false,
+      "maxOverWorkingMinutesWarning": false
+    }
+  },
+  "today": {
+    "totalActualWorkingMinutes": 0,
+    "totalRecognizedWorkingMinutes": 0
+  },
+  "status": {
+    "targetDate": "2026-10-15",
+    "onTimeInfo": {
+      "clockInOnTimeInfo": {},
+      "clockOutOnTimeInfo": {
+        "withinOnTimeBuffer": false,
+        "clockOnTime": 1792057980000
+      }
+    },
+    "appliedZoneId": "Asia/Seoul",
+    "requestedAt": 1792034242547,
+    "onGoingRecordPack": {
+      "startRecord": {
+        "eventType": "START",
+        "targetTime": 1792025580000,
+        "recordType": "RECORD"
+      },
+      "switchRecords": [],
+      "restRecords": [
+        {
+          "restStartRecord": {
+            "eventType": "REST_START",
+            "targetTime": 1792036800000,
+            "recordType": "PLAN_BY_AUTO"
+          },
+          "restStopRecord": {
+            "eventType": "REST_STOP",
+            "targetTime": 1792040400000,
+            "recordType": "PLAN_BY_AUTO"
+          }
+        }
+      ],
+      "onGoing": true
+    }
+  },
+  "schedules": {
+    "userIdHash": "user-1",
+    "dailySchedules": [
+      {
+        "date": "2026-10-01",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790817000000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790845440000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790827200000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790830800000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-02",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790903160000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790954940000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790913600000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1790917200000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-03",
+        "dayOffs": [
+          {
+            "type": "REST_DAY"
+          },
+          {
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791008520000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791034920000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791031140000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791031740000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-04",
+        "dayOffs": [
+          {
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-05",
+        "dayOffs": [
+          {
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-06",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791248040000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791277260000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791259200000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791262800000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-07",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791334260000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791376380000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791345600000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791349200000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791363060000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791366360000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-08",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791420900000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791448620000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791432000000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791435600000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-09",
+        "dayOffs": [
+          {
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-10",
+        "dayOffs": [
+          {
+            "type": "REST_DAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-11",
+        "dayOffs": [
+          {
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-12",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791766740000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791809700000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791777600000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791781200000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-13",
+        "dayOffs": [],
+        "timeBlocks": [
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791853140000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791877740000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "REST",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791864000000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791867600000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          },
+          {
+            "type": "WORK",
+            "value": {
+              "startTimestamp": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791877740000
+              },
+              "endTimestampExclusive": {
+                "zoneId": "Asia/Seoul",
+                "timestamp": 1791885600000
+              },
+              "eventStatus": "RECORD",
+              "allDay": false
+            }
+          }
+        ]
+      },
+      {
+        "date": "2026-10-14",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-15",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-16",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-17",
+        "dayOffs": [
+          {
+            "type": "REST_DAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-18",
+        "dayOffs": [
+          {
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-19",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-20",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-21",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-22",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-23",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-24",
+        "dayOffs": [
+          {
+            "type": "REST_DAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-25",
+        "dayOffs": [
+          {
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-26",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-27",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-28",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-29",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-30",
+        "dayOffs": [],
+        "timeBlocks": []
+      },
+      {
+        "date": "2026-10-31",
+        "dayOffs": [
+          {
+            "type": "REST_DAY"
+          }
+        ],
+        "timeBlocks": []
+      }
+    ]
+  },
+  "attributes": {
+    "workingDayAttributes": [
+      {
+        "date": "2026-10-01",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-02",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-03",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-03",
+            "name": "휴무일",
+            "type": "REST_DAY"
+          },
+          {
+            "date": "2026-10-03",
+            "name": "개천절",
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-04",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-04",
+            "name": "주휴일",
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-05",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-05",
+            "name": "개천절 대체휴일",
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-06",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-07",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-08",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-09",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-09",
+            "name": "한글날",
+            "type": "CUSTOM_HOLIDAY"
+          }
+        ],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-10",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-10",
+            "name": "휴무일",
+            "type": "REST_DAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-11",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-11",
+            "name": "주휴일",
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-12",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-13",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-14",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-15",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-16",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-17",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-17",
+            "name": "휴무일",
+            "type": "REST_DAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-18",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-18",
+            "name": "주휴일",
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-19",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-20",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-21",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-22",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-23",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-24",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-24",
+            "name": "휴무일",
+            "type": "REST_DAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-25",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-25",
+            "name": "주휴일",
+            "type": "WEEKLY_HOLIDAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      },
+      {
+        "date": "2026-10-26",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-27",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-28",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-29",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-30",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [],
+        "coreTime": {
+          "start": "10:00:00",
+          "endInclusive": "17:00:00",
+          "dayPassed": false
+        },
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 480
+      },
+      {
+        "date": "2026-10-31",
+        "timezone": "Asia/Seoul",
+        "dateType": "IN_EMPLOY",
+        "dayOffs": [
+          {
+            "date": "2026-10-31",
+            "name": "휴무일",
+            "type": "REST_DAY"
+          }
+        ],
+        "recommendedRestTimeRanges": [
+          {
+            "start": "13:00:00",
+            "endInclusive": "14:00:00",
+            "dayPassed": false
+          }
+        ],
+        "usualWorkingMinutes": 0
+      }
+    ]
+  },
+  "userRule": {
+    "workRule": {
+      "customerWorkRuleId": "101"
+    }
+  },
+  "rules": {
+    "workRules": [
+      {
+        "customerWorkRuleId": "101",
+        "baseAgreedDayWorkingMinutes": 480
+      }
+    ]
+  },
+  "historySchedule": {
+    "date": "2026-09-04",
+    "dayOffs": [],
+    "timeBlocks": [
+      {
+        "type": "ANNUAL_TIME_OFF",
+        "value": {
+          "allDay": false,
+          "startTimestamp": {
+            "timestamp": 1788447600000
+          },
+          "endTimestampExclusive": {
+            "timestamp": 1788462000000
+          },
+          "status": "TIME_OFF_REGISTERED",
+          "timeOffRegisterUnit": "HALF_DAY_AM",
+          "restMinutes": 0,
+          "usedMinutes": 240,
+          "usedPaidMinutes": 240
+        }
+      }
+    ]
+  },
+  "historyAttribute": {
+    "date": "2026-09-04",
+    "timezone": "Asia/Seoul",
+    "dateType": "IN_EMPLOY",
+    "dayOffs": [],
+    "coreTime": {
+      "start": "10:00:00",
+      "endInclusive": "17:00:00",
+      "dayPassed": false
+    },
+    "recommendedRestTimeRanges": [
+      {
+        "start": "13:00:00",
+        "endInclusive": "14:00:00",
+        "dayPassed": false
+      }
+    ],
+    "usualWorkingMinutes": 480
+  },
+  "serverTime": {
+    "zoneId": "Z",
+    "timeStamp": 1792034242547
+  }
+}

@@ -1205,6 +1205,12 @@ struct MonthSummary: View {
             Text("누적 \(AttendanceSnapshot.duration(month.actualMinutes)) · 남은 근무일 \(snapshot.remainingWorkDays)일")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let pace = snapshot.requiredPace {
+                Text(pace.remainingMinutes == 0 ? "필수시간을 채웠어요"
+                     : pace.days == 0 ? "남은 근무일 없음 · \(AttendanceSnapshot.duration(pace.remainingMinutes)) 부족"
+                     : "필수까지 \(AttendanceSnapshot.duration(pace.remainingMinutes)) · \(pace.days)일 동안 하루 평균 \(AttendanceSnapshot.duration(pace.dailyMinutes))")
+                    .font(.caption.weight(.semibold))
+            }
             WorkProgressBar(fill: meter.fillFraction, markers: markers,
                             value: "필수시간 반영 \(AttendanceSnapshot.duration(month.creditedMinutes)), 필수시간 대비 \(snapshot.monthMeter.percent)%" + liveValue,
                             label: "월간 누적 근무시간", confirmedFill: confirmedMeter.fillFraction,

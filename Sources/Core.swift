@@ -425,16 +425,27 @@ struct AttendanceSnapshot {
     var todayMeter: WorkMeter {
         WorkMeter(actualMinutes: todayMinutes, targetMinutes: month.dailyRequiredMinutes)
     }
-    var minimumTodayMeter: WorkMeter? {
-        guard attendanceKnown else { return nil }
+    /// Remaining workdays this month; today counts while it is a scheduled workday not yet finished.
+    private var remainingDaysIncludingToday: Int {
         let countedToday = record.map {
             Self.remainingScheduledDays(in: [$0], during: month, today: $0.date, at: updatedAt)
         } ?? 0
-        let days = remainingWorkDays + (record?.isScheduledWorkday == true ? 1 - countedToday : 0)
+        return remainingWorkDays + (record?.isScheduledWorkday == true ? 1 - countedToday : 0)
+    }
+    var minimumTodayMeter: WorkMeter? {
+        guard attendanceKnown else { return nil }
+        let days = remainingDaysIncludingToday
         guard days > 0 else { return nil }
         let remainingBeforeToday = max(0, month.targetMinutes - month.creditedMinutes + (todayCreditedMinutesInMonth ?? todayMinutes))
         let target = Int(ceil(Double(remainingBeforeToday) / Double(days)))
         return WorkMeter(actualMinutes: todayMinutes, targetMinutes: target)
+    }
+    /// Required minutes still owed (live) and the daily average needed over the remaining workdays.
+    var requiredPace: (days: Int, remainingMinutes: Int, dailyMinutes: Int)? {
+        guard attendanceKnown else { return nil }
+        let days = remainingDaysIncludingToday
+        let remaining = max(0, month.targetMinutes - displayMonth.creditedMinutes)
+        return (days, remaining, days > 0 ? Int(ceil(Double(remaining) / Double(days))) : remaining)
     }
     var minimumTodayFill: Double {
         guard let meter = minimumTodayMeter else { return 0 }

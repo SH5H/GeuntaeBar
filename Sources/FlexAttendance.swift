@@ -306,7 +306,6 @@ enum FlexAttendance {
                 if let active, let activeStart {
                     guard active.startRecord.eventType == "START", active.startRecord.recordType == "RECORD",
                           active.stopRecord == nil, activeStart <= now,
-                          work.allSatisfy({ $0.end <= activeStart }),
                           active.switchRecords.allSatisfy({ $0.eventType == "SWITCH" && $0.targetTime >= active.startRecord.targetTime }) else {
                         throw FlexError.inconsistent
                     }
@@ -323,11 +322,12 @@ enum FlexAttendance {
                     let clock = LiveWorkClock(start: activeStart, completedMinutes: today.totalRecognizedWorkingMinutes,
                                               rests: union(liveRests), countsTowardTarget: attribute.usualWorkingMinutes > 0 &&
                                                 attribute.dayOffs.isEmpty && day.dayOffs.isEmpty)
-                    liveWorkClock = clock
+                    // Recorded work already contributes to server totals; overlapping live time cannot be added again.
+                    if work.allSatisfy({ $0.end <= activeStart }) { liveWorkClock = clock }
                     row = DailyRecord(date: row.date, start: FlexDates.iso(min(work.first?.start ?? activeStart, activeStart), in: zone),
                         scheduledStart: row.scheduledStart, scheduledEnd: row.scheduledEnd,
                         workedMinutes: today.totalRecognizedWorkingMinutes,
-                        currentMinutes: clock.minutes(at: now))
+                        currentMinutes: liveWorkClock?.minutes(at: now) ?? today.totalRecognizedWorkingMinutes)
                     row.scheduledWorkday = isWorkday
                 } else if status.onGoingRecordPack?.stopRecord != nil && work.isEmpty {
                     throw FlexError.inconsistent
@@ -352,8 +352,9 @@ enum FlexAttendance {
         snapshot.todayCreditedMinutesInMonth = today.totalActualWorkingMinutes
         snapshot.dailyRestMinutes = todayRestMinutes
         snapshot.dailyTargetMinutes = dailyTarget
-        snapshot.isEstimated = active != nil
+        snapshot.isEstimated = liveWorkClock != nil
         snapshot.liveWorkClock = liveWorkClock
+        if active != nil && liveWorkClock == nil { snapshot.attendanceNote = "근무 중 · flex 집계 기준" }
         snapshot.advanceLiveTime(to: ServerClock(offset: serverClockOffset, updatedAt: now)
             .deviceTime(forServerTime: now))
         snapshot.remindersAvailable = remindersAvailable

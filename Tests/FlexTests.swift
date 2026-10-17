@@ -194,6 +194,20 @@ struct FlexTests {
         precondition(!clockedOut.record!.isWorking && clockedOut.todayMinutes == 480)
         precondition(clockedOut.minimumTodayMeter?.targetMinutes == live.minimumTodayMeter?.targetMinutes)
         precondition(clockedOut.month.actualMinutes == 4680 && clockedOut.todayCreditedMinutesInMonth == 480)
+        var overlappingClock = f
+        overlappingClock["today"] = ["totalActualWorkingMinutes": 119, "totalRecognizedWorkingMinutes": 119]
+        var overlappingSchedules = f["schedules"] as! [String: Any]
+        var overlappingDays = overlappingSchedules["dailySchedules"] as! [[String: Any]]
+        overlappingDays[todayIndex]["timeBlocks"] = try [block("WORK", "09:00:00", "14:00:00")]
+        overlappingSchedules["dailySchedules"] = overlappingDays
+        overlappingClock["schedules"] = overlappingSchedules
+        var serverTotal = try snapshot(overlappingClock)
+        precondition(serverTotal.todayMinutes == 119 && serverTotal.record?.isWorking == true)
+        precondition(serverTotal.liveWorkClock == nil && !serverTotal.isEstimated)
+        precondition(serverTotal.displayMonth.actualMinutes == 4200 && serverTotal.displayMonth.creditedMinutes == 3770)
+        precondition(serverTotal.attendanceNote == "근무 중 · flex 집계 기준")
+        serverTotal.advanceLiveTime(to: try FlexDates.parse("2026-10-15T14:30:00"))
+        precondition(serverTotal.todayMinutes == 119)
         var beforeClockOut = live
         beforeClockOut.advanceLiveTime(to: try FlexDates.parse("2026-10-15T18:53:00"))
         precondition(beforeClockOut.displayMonth.actualMinutes == clockedOut.displayMonth.actualMinutes)

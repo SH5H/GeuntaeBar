@@ -72,55 +72,99 @@ final class FlexClient {
             _ = try? await previous?.value
             try Task.checkCancellation()
             guard self.revision == attempt else { throw CancellationError() }
-            let delay = self.nextRequestAt.timeIntervalSinceNow
-            if delay > 0 { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
-            try Task.checkCancellation()
-            guard self.revision == attempt else { throw CancellationError() }
-            var request = URLRequest(url: url)
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("ko", forHTTPHeaderField: "FlexTeam-Locale")
-            request.setValue("base", forHTTPHeaderField: "x-flex-axios")
-            request.setValue("FLEX", forHTTPHeaderField: "flexteam-productcode")
-            request.setValue(AttendanceService.flex.webURL.absoluteString, forHTTPHeaderField: "Referer")
-            let applicable = self.currentCookies().filter { cookie in
-                let domain = cookie.domain.lowercased()
-                let hostMatches = domain.hasPrefix(".")
-                    ? url.host == String(domain.dropFirst()) || url.host!.hasSuffix(domain)
-                    : url.host == domain
-                let pathMatches = url.path == cookie.path || url.path.hasPrefix(cookie.path.hasSuffix("/") ? cookie.path : cookie.path + "/")
-                return hostMatches && pathMatches
+            let request = URLRequest(url: url)
+            do { return try await self.send(request, attempt: attempt) }
+            catch FlexError.authentication {
+                try await self.renewSession(attempt: attempt)
+                return try await self.send(request, attempt: attempt)
             }
-            guard !applicable.isEmpty else { throw FlexError.authentication }
-            for (name, value) in HTTPCookie.requestHeaderFields(with: applicable) {
-                request.setValue(value, forHTTPHeaderField: name)
-            }
-            self.nextRequestAt = Date().addingTimeInterval(self.requestInterval)
-            let (data, response) = try await self.session.data(for: request)
-            try Task.checkCancellation()
-            guard self.revision == attempt else { throw CancellationError() }
-            guard let response = response as? HTTPURLResponse else { throw FlexError.inconsistent }
-            let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
-                if let key = item.key as? String, let value = item.value as? String { result[key] = value }
-            }
-            for cookie in HTTPCookie.cookies(withResponseHeaderFields: headers, for: url) where SavedCookie(cookie).belongsTo(.flex) {
-                self.cookies.removeAll { $0.name == cookie.name && $0.domain == cookie.domain && $0.path == cookie.path }
-                if SavedCookie(cookie).isCurrent { self.cookies.append(cookie) }
-            }
-            switch response.statusCode {
-            case 200..<300: break
-            case 300..<400, 401: throw FlexError.authentication
-            case 403: throw FlexError.permissionDenied
-            case 429:
-                let delay = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 60
-                self.nextRequestAt = Date().addingTimeInterval(delay.isFinite ? min(86400, max(1, delay)) : 60)
-                throw FlexError.rateLimited
-            default: throw FlexError.httpStatus(response.statusCode)
-            }
-            guard response.mimeType == "application/json" else { throw FlexError.inconsistent }
-            return data
         }
         requestTask = task
         return try await task.value
+    }
+
+    private func send(_ original: URLRequest, attempt: Int) async throws -> Data {
+        var request = original
+        let url = request.url!
+        let delay = nextRequestAt.timeIntervalSinceNow
+        if delay > 0 { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+        try Task.checkCancellation()
+        guard revision == attempt else { throw CancellationError() }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("ko", forHTTPHeaderField: "FlexTeam-Locale")
+        request.setValue("base", forHTTPHeaderField: "x-flex-axios")
+        request.setValue("FLEX", forHTTPHeaderField: "flexteam-productcode")
+        request.setValue(AttendanceService.flex.webURL.absoluteString, forHTTPHeaderField: "Referer")
+        let applicable = currentCookies().filter { cookie in
+            let domain = cookie.domain.lowercased()
+            let hostMatches = domain.hasPrefix(".")
+                ? url.host == String(domain.dropFirst()) || url.host!.hasSuffix(domain)
+                : url.host == domain
+            let pathMatches = url.path == cookie.path || url.path.hasPrefix(cookie.path.hasSuffix("/") ? cookie.path : cookie.path + "/")
+            return hostMatches && pathMatches
+        }
+        guard !applicable.isEmpty else { throw FlexError.authentication }
+        for (name, value) in HTTPCookie.requestHeaderFields(with: applicable) {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        nextRequestAt = Date().addingTimeInterval(requestInterval)
+        let (data, response) = try await session.data(for: request)
+        try Task.checkCancellation()
+        guard revision == attempt else { throw CancellationError() }
+        guard let response = response as? HTTPURLResponse else { throw FlexError.inconsistent }
+        let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
+            if let key = item.key as? String, let value = item.value as? String { result[key] = value }
+        }
+        for cookie in HTTPCookie.cookies(withResponseHeaderFields: headers, for: url) where SavedCookie(cookie).belongsTo(.flex) {
+            cookies.removeAll { $0.name == cookie.name && $0.domain == cookie.domain && $0.path == cookie.path }
+            if SavedCookie(cookie).isCurrent { cookies.append(cookie) }
+        }
+        switch response.statusCode {
+        case 200..<300: break
+        case 300..<400, 401: throw FlexError.authentication
+        case 403: throw FlexError.permissionDenied
+        case 429:
+            let delay = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 60
+            nextRequestAt = Date().addingTimeInterval(delay.isFinite ? min(86400, max(1, delay)) : 60)
+            throw FlexError.rateLimited
+        default: throw FlexError.httpStatus(response.statusCode)
+        }
+        guard response.mimeType == "application/json" else { throw FlexError.inconsistent }
+        return data
+    }
+
+    private func renewSession(attempt: Int) async throws {
+        struct Customer: Decodable { let customerIdHash: String; let userIdHash: String }
+        struct Token: Decodable { let token: String; let expireAt: String }
+        struct Renewal: Decodable {
+            struct Workspace: Decodable { let accessToken: Token; let refreshToken: Token? }
+            let workspaceToken: Workspace
+            let customerUserAccessToken: Token
+        }
+        let stored = currentCookies().filter { $0.domain == "flex.team" && $0.path == "/" }
+        guard let refresh = stored.first(where: { $0.name == "V2_WS_RID" }),
+              let info = stored.first(where: { $0.name == "V2_CUSTOMER_INFO" }),
+              let data = info.value.removingPercentEncoding?.data(using: .utf8),
+              let customer = try? JSONDecoder().decode(Customer.self, from: data),
+              !customer.customerIdHash.isEmpty, !customer.userIdHash.isEmpty else { throw FlexError.authentication }
+        var request = URLRequest(url: URL(string: "https://flex.team/api-public/v2/auth/tokens/customer-user/refresh")!)
+        request.httpMethod = "POST"
+        request.setValue(refresh.value, forHTTPHeaderField: "FlexTeam-V2-Workspace-Refresh")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["customerUuid": customer.customerIdHash, "userUuid": customer.userIdHash])
+        let renewal = try JSONDecoder().decode(Renewal.self, from: await send(request, attempt: attempt))
+        var tokens = [("V2_WS_AID", renewal.workspaceToken.accessToken), ("AID", renewal.customerUserAccessToken)]
+        if let refresh = renewal.workspaceToken.refreshToken { tokens.append(("V2_WS_RID", refresh)) }
+        tokens.append(("FlexTeam-Version", Token(token: "V2", expireAt:
+            (renewal.workspaceToken.refreshToken ?? renewal.workspaceToken.accessToken).expireAt)))
+        for (name, token) in tokens {
+            let expires = try FlexDates.parse(token.expireAt)
+            guard !token.token.isEmpty, expires > Date(), let cookie = HTTPCookie(properties: [
+                .name: name, .value: token.token, .domain: "flex.team", .path: "/", .secure: "TRUE", .expires: expires
+            ]) else { throw FlexError.inconsistent }
+            cookies.removeAll { $0.name == name && $0.domain == cookie.domain && $0.path == cookie.path }
+            cookies.append(cookie)
+        }
     }
 
     private func fetch<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {

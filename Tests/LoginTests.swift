@@ -501,6 +501,13 @@ struct LoginTests {
         _ = await model.refresh()
         let expired = try flexVault.load()
         precondition(expired.isEmpty && !model.loginCompleted && !model.hasSavedSession && model.snapshot == nil)
+
+        // Keep the initial login's cookies too when a later attendance request fails.
+        error = URLError(.notConnectedToInternet)
+        model.beginSignIn()
+        await model.acceptCookies([flexCookie])
+        let retryable = try flexVault.load()
+        precondition(!retryable.isEmpty && !model.loginCompleted)
     }
     static func legacyPurgeFailureChecks() async throws {
         let suite = "geuntae-legacy-purge-\(UUID().uuidString)"

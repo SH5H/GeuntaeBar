@@ -55,6 +55,7 @@ struct FlexTests {
         try attendanceChecks()
         try customHolidayChecks()
         try await requestChecks()
+        try await renewalChecks()
         try await fetchingChecks()
         print("Flex web API checks passed")
     }
@@ -297,6 +298,76 @@ struct FlexTests {
         pending.clearCookies()
         do { _ = try await task.value; preconditionFailure("Cancelled response must not restore cookies") }
         catch {}
+        precondition(pending.currentCookies().isEmpty)
+        FlexStubProtocol.hold = false; FlexStubProtocol.delayed = nil
+    }
+    static func renewalChecks() async throws {
+        let refreshPath = "/api-public/v2/auth/tokens/customer-user/refresh"
+        let info = #"{"customerIdHash":"company","userIdHash":"user"}"#
+        let saved = [cookie("V2_WS_RID"), SavedCookie(HTTPCookie(properties: [
+            .name: "V2_CUSTOMER_INFO", .value: info.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!,
+            .domain: "flex.team", .path: "/", .secure: "TRUE"
+        ])!)]
+        let renewed = Data(#"{"workspaceToken":{"accessToken":{"token":"workspace-new","expireAt":"2099-01-01T00:00:00.123456789Z"},"refreshToken":{"token":"refresh-new","expireAt":"2099-01-08T00:00:00Z"}},"customerUserAccessToken":{"token":"access-new","expireAt":"2099-01-01T00:00:00Z"}}"#.utf8)
+        for status in [401, 302] {
+            let api = client()
+            api.restore(saved)
+            FlexStubProtocol.requests = []
+            FlexStubProtocol.handler = { request in
+                if request.url!.path == refreshPath {
+                    precondition(request.httpMethod == "POST")
+                    precondition(request.value(forHTTPHeaderField: "FlexTeam-V2-Workspace-Refresh") == "test-session")
+                    var body = request.httpBody ?? Data()
+                    if let stream = request.httpBodyStream {
+                        stream.open()
+                        defer { stream.close() }
+                        var buffer = [UInt8](repeating: 0, count: 1024)
+                        while stream.hasBytesAvailable {
+                            let count = stream.read(&buffer, maxLength: buffer.count)
+                            precondition(count >= 0)
+                            body.append(contentsOf: buffer.prefix(count))
+                        }
+                    }
+                    let data = try JSONSerialization.jsonObject(with: body) as! [String: String]
+                    precondition(data == ["customerUuid": "company", "userUuid": "user"])
+                    return (200, renewed, [:])
+                }
+                if request.value(forHTTPHeaderField: "Cookie")?.contains("AID=access-new") == true {
+                    return (200, Data("{}".utf8), [:])
+                }
+                return (status, Data("{}".utf8), [:])
+            }
+            _ = try await api.get("/api/v2/test")
+            precondition(FlexStubProtocol.requests.count == 3)
+            precondition(api.currentCookies().contains { $0.name == "V2_WS_RID" && $0.value == "refresh-new" && $0.isSecure })
+            precondition(api.currentCookies().contains { $0.name == "AID" && $0.value == "access-new" && $0.expiresDate! > Date() })
+        }
+        for status in [200, 401, 500] {
+            let api = client()
+            api.restore(saved)
+            FlexStubProtocol.requests = []
+            FlexStubProtocol.handler = { request in
+                request.url!.path == refreshPath ? (status, renewed, [:]) : (401, Data("{}".utf8), [:])
+            }
+            do { _ = try await api.get("/api/v2/test"); preconditionFailure("Rejected sessions must fail without looping") }
+            catch FlexError.authentication { precondition(status != 500) }
+            catch FlexError.httpStatus(500) { precondition(status == 500) }
+            precondition(FlexStubProtocol.requests.count == (status == 200 ? 3 : 2))
+            if status == 500 { precondition(api.currentCookies().contains { $0.name == "V2_WS_RID" }) }
+        }
+        let pending = client()
+        pending.restore(saved)
+        FlexStubProtocol.handler = { _ in
+            FlexStubProtocol.hold = true
+            return (401, Data("{}".utf8), [:])
+        }
+        let task = Task { try await pending.get("/api/v2/test") }
+        while FlexStubProtocol.delayed == nil { await Task.yield() }
+        precondition(FlexStubProtocol.delayed?.request.url?.path == refreshPath)
+        pending.clearCookies()
+        do { _ = try await task.value; preconditionFailure("Logout must cancel token renewal") }
+        catch is CancellationError {}
+        catch let error as URLError { precondition(error.code == .cancelled) }
         precondition(pending.currentCookies().isEmpty)
         FlexStubProtocol.hold = false; FlexStubProtocol.delayed = nil
     }

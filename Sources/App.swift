@@ -250,7 +250,7 @@ final class FlexBackend: AttendanceBackend {
             try? vault.delete()
             return .signInRequired
         default:
-            if hadSession {
+            if !(error is KeychainError) && (hadSession || !currentCookies.isEmpty) {
                 // Keep cookies renewed by partial requests.
                 do { try sessionSaver(currentCookies) }
                 catch { return .failed(loginMessage: error.localizedDescription, status: "Keychain 저장 실패") }

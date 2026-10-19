@@ -4,6 +4,7 @@
 <dict>
     <key>CFBundleName</key><string>Geuntae bar</string>
     <key>CFBundleDisplayName</key><string>Geuntae bar</string>
+    <key>CFBundleAlternateNames</key><array><string>근태바</string></array>
     <key>CFBundleIdentifier</key><string>ai.wantedspace.WorkBar</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>CFBundleShortVersionString</key><string>0.1</string>

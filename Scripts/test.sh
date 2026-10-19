@@ -5,6 +5,11 @@ build_tmp="$(mktemp -d "${TMPDIR:-/tmp}/geuntae-bar-tests.XXXXXX")"
 trap 'rm -rf "$build_tmp"' EXIT
 trap 'exit 1' HUP INT TERM
 S=Sources T=Tests
+app="$build_tmp/Geuntae bar.app"
+mkdir -p "$app/Contents/MacOS"
+cp Resources/Info.plist "$app/Contents/Info.plist"
+cp /usr/bin/true "$app/Contents/MacOS/Geuntae bar"
+sh "$T/SpotlightTests.sh" "$app"
 swiftc $S/Onboarding.swift $T/OnboardingTests.swift -o "$build_tmp/onboarding-tests"
 "$build_tmp/onboarding-tests"
 swiftc $S/Core.swift $S/Compensation.swift $T/CoreTests.swift -o "$build_tmp/core-tests"

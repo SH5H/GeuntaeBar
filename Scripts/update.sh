@@ -41,6 +41,7 @@ if ! git -C "$update_dir/source" merge-base --is-ancestor "$revision" "$latest" 
 fi
 if [ "$mode" = check ]; then
     echo "available:$latest"
+    git -C "$update_dir/source" log --no-color --format='%h %s' "$revision..$latest"
     exit 0
 fi
 

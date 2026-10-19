@@ -35,12 +35,15 @@ struct UpdaterTests {
             try String(status).write(to: resources.appendingPathComponent("status"), atomically: true, encoding: .utf8)
         }
         let revision = String(repeating: "a", count: 40)
+        let commits = ["aaaaaaa fix(flex): 근무 집계 중복 수정", "bbbbbbb fix(flex): 접속 토큰 자동 갱신"]
+        let changes = commits.joined(separator: "\n")
         let updater = AppUpdater(appURL: app, defaults: defaults,
                                  logURL: directory.appendingPathComponent("update.log"))
         precondition(updater.automaticChecks)
-        try response("available:\(revision)")
+        try response("available:\(revision)\n\(changes)")
         await updater.check(force: false)
         precondition(updater.availableRevision == revision && !updater.isChecking)
+        precondition(updater.availableCommits == commits)
         await updater.check(force: false)
         let checks = try String(contentsOf: resources.appendingPathComponent("checks"), encoding: .utf8)
         precondition(checks == "check\n")
@@ -77,7 +80,8 @@ struct UpdaterTests {
         try VNImageRequestHandler(cgImage: image).perform([request])
         let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
             .joined().filter { !$0.isWhitespace }
-        precondition(text.contains("새버전자동확인") && text.contains("업데이트설치") && text.contains("종료"))
+        precondition(text.contains("새버전자동확인") && text.contains("업데이트설치"))
+        precondition(text.contains("포함된커밋2개") && text.contains("근무집계중복수정") && text.contains("토큰자동갱신"), text)
         precondition(text.contains("알림테스트"))
         let reminderTime = snapshot.clockInReminderTime(mode: model.reminderMode, delayMinutes: model.reminderDelayMinutes)
         precondition(text.contains("기준시각\(model.reminderDelayMinutes)분후(\(reminderTime))"))
@@ -95,13 +99,20 @@ struct UpdaterTests {
         try response("current")
         await updater.check()
         precondition(updater.availableRevision == nil && updater.message == "최신 버전입니다")
+        precondition(updater.availableCommits.isEmpty)
+        try response("available:\(revision)\n\(changes)")
+        await updater.check()
         try response("local")
         await updater.check()
         precondition(updater.availableRevision == nil && updater.message.contains("수동"))
-        for (body, status) in [("network failure", 1), ("available:not-a-commit", 0)] {
+        precondition(updater.availableCommits.isEmpty)
+        for (body, status) in [("network failure", 1), ("available:not-a-commit\n\(changes)", 0), ("available:\(revision)", 0)] {
+            try response("available:\(revision)\n\(changes)")
+            await updater.check()
             try response(body, status: status)
             await updater.check()
             precondition(!updater.isChecking && updater.message.contains("확인하지 못했어요"))
+            precondition(updater.availableRevision == nil && updater.availableCommits.isEmpty)
         }
 
         updater.automaticChecks = false
@@ -116,23 +127,27 @@ struct UpdaterTests {
 
         // A started updater asks once per new revision and installs only when accepted.
         var prompts: [String] = []
+        var promptedCommits: [[String]] = []
         var accept = false
         let prompting = AppUpdater(appURL: app, defaults: defaults, logURL: directory.appendingPathComponent("prompt.log"),
-                                   confirmInstall: { prompts.append($0); return accept })
+                                   confirmInstall: { prompts.append($0); promptedCommits.append($1); return accept })
         prompting.start()
-        try response("available:\(revision)")
+        try response("available:\(revision)\n\(changes)")
         await prompting.check()
         for _ in 0..<100 where prompts.isEmpty { await Task.yield() }
         precondition(prompts == [revision] && !prompting.isInstalling)
+        precondition(promptedCommits == [commits])
         await prompting.check()
         for _ in 0..<100 { await Task.yield() }
         precondition(prompts == [revision])
         let next = String(repeating: "b", count: 40)
         accept = true
-        try response("available:\(next)")
+        let nextCommits = ["bbbbbbb feat(update): 업데이트 커밋 표시"] + commits
+        try response("available:\(next)\n\(nextCommits.joined(separator: "\n"))")
         await prompting.check()
         for _ in 0..<100 where !prompting.isInstalling { await Task.yield() }
         precondition(prompts == [revision, next] && prompting.isInstalling)
+        precondition(promptedCommits == [commits, nextCommits])
         for _ in 0..<200 where prompting.isInstalling { try await Task.sleep(for: .milliseconds(10)) }
         precondition(prompting.installFailed)
         print("App update checks passed")

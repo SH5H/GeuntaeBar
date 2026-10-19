@@ -1014,6 +1014,9 @@ struct WorkOptionsWindow: View {
             Section("앱 업데이트") {
                 Toggle("새 버전 자동 확인", isOn: $updater.automaticChecks)
                 Text(updater.message).font(.caption).foregroundStyle(.secondary)
+                if !updater.availableCommits.isEmpty {
+                    UpdateCommitList(commits: updater.availableCommits)
+                }
                 if updater.isInstalling {
                     ProgressView(value: Double(updater.installStep), total: Double(AppUpdater.installSteps.count))
                 }

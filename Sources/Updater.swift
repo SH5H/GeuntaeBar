@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftUI
 
 @MainActor
 final class AppUpdater: ObservableObject {
@@ -12,6 +13,7 @@ final class AppUpdater: ObservableObject {
     }
     @Published private(set) var message = "업데이트 확인 전"
     @Published private(set) var availableRevision: String?
+    @Published private(set) var availableCommits: [String] = []
     @Published private(set) var isChecking = false
     @Published private(set) var isInstalling = false
     @Published private(set) var installFailed = false
@@ -22,14 +24,14 @@ final class AppUpdater: ObservableObject {
 
     private let appURL: URL
     private let defaults: UserDefaults
-    private let confirmInstall: @MainActor (String) async -> Bool
+    private let confirmInstall: @MainActor (String, [String]) async -> Bool
     private var promptsForInstall = false
     private var timer: Timer?
     private var installer: Process?
     private var scriptURL: URL { appURL.appendingPathComponent("Contents/Resources/update.sh") }
 
     init(appURL: URL = Bundle.main.bundleURL, defaults: UserDefaults = .standard, logURL: URL? = nil,
-         confirmInstall: @escaping @MainActor (String) async -> Bool = AppUpdater.askToInstall) {
+         confirmInstall: @escaping @MainActor (String, [String]) async -> Bool = AppUpdater.askToInstall) {
         self.appURL = appURL
         self.defaults = defaults
         self.logURL = logURL ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -54,6 +56,8 @@ final class AppUpdater: ObservableObject {
             guard Date().timeIntervalSince(lastCheck) >= 86400 else { return }
         }
         isChecking = true
+        availableRevision = nil
+        availableCommits = []
         message = "새 버전 확인 중…"
         defaults.set(Date(), forKey: "lastAppUpdateCheck")
         defer { isChecking = false }
@@ -74,20 +78,22 @@ final class AppUpdater: ObservableObject {
                     .trimmingCharacters(in: .whitespacesAndNewlines))
             }.value
             guard result.0 == 0 else { throw CocoaError(.fileReadUnknown) }
-            switch result.1 {
+            let lines = result.1.components(separatedBy: "\n")
+            let status = lines[0]
+            switch status {
             case "current":
-                availableRevision = nil
                 message = "최신 버전입니다"
             case "local":
-                availableRevision = nil
                 message = "로컬 변경이 있는 빌드는 수동으로 업데이트해주세요"
             default:
-                guard result.1.hasPrefix("available:") else { throw CocoaError(.fileReadCorruptFile) }
-                let revision = String(result.1.dropFirst("available:".count))
-                guard revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil else {
+                guard status.hasPrefix("available:") else { throw CocoaError(.fileReadCorruptFile) }
+                let revision = String(status.dropFirst("available:".count))
+                guard revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil,
+                      lines.count > 1 else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
                 availableRevision = revision
+                availableCommits = Array(lines.dropFirst())
                 message = "새 버전을 설치할 수 있습니다"
                 // After this check returns, so install() is not blocked by isChecking.
                 if promptsForInstall { Task { await promptToInstall(revision: revision) } }
@@ -156,22 +162,44 @@ final class AppUpdater: ObservableObject {
 
     /// Asks once per revision; declining leaves the install button in the options window.
     private func promptToInstall(revision: String) async {
+        guard !isChecking, availableRevision == revision else { return }
         guard defaults.string(forKey: "lastPromptedAppRevision") != revision else { return }
         defaults.set(revision, forKey: "lastPromptedAppRevision")
-        guard await confirmInstall(revision) else { return }
+        guard await confirmInstall(revision, availableCommits), availableRevision == revision else { return }
         install()
         // Accepted from the alert: open the options window so the progress is visible.
         NotificationCenter.default.post(name: Self.showProgressNotification, object: nil)
     }
     static let showProgressNotification = Notification.Name("GeuntaeBarShowUpdateProgress")
 
-    static func askToInstall(_ revision: String) async -> Bool {
+    static func askToInstall(_ revision: String, commits: [String]) async -> Bool {
         NSApplication.shared.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Geuntae bar 새 버전이 있어요"
         alert.informativeText = "지금 업데이트할까요? 새 버전을 빌드한 뒤 앱이 재시작됩니다."
+        let changes = NSHostingView(rootView: UpdateCommitList(commits: commits))
+        changes.frame = NSRect(x: 0, y: 0, width: 380, height: 150)
+        alert.accessoryView = changes
         alert.addButton(withTitle: "업데이트")
         alert.addButton(withTitle: "나중에")
         return alert.runModal() == .alertFirstButtonReturn
+    }
+}
+
+struct UpdateCommitList: View {
+    let commits: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("포함된 커밋 \(commits.count)개").font(.caption).bold()
+            ScrollView {
+                Text(commits.joined(separator: "\n"))
+                    .font(.caption)
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 120)
+        }
     }
 }

@@ -33,6 +33,7 @@ final class AttendanceStubProtocol: URLProtocol {
 @main
 struct CoreTests {
     static func main() async throws {
+        monthlyBaselineChecks()
         try flexAccountingChecks()
         try await renewalChecks()
         try await overnightChecks()
@@ -228,7 +229,7 @@ struct CoreTests {
                                        startDate: "2026-09-01", endDate: "2026-09-30",
                                        maximumWorkMinutes: nil)
         precondition(AttendanceSnapshot(record: minimumDay, month: aheadMonth,
-                                        remainingWorkDays: 2, updatedAt: morning).expectedMinutesByNow == 7560)
+                                        remainingWorkDays: 2, updatedAt: morning).expectedMinutesByNow == 7440)
         let laterDay = DailyRecord(date: minimumDay.date, start: minimumDay.start,
                                   scheduledEnd: minimumDay.scheduledEnd, currentMinutes: 360,
                                   holidayStatus: minimumDay.holidayStatus)
@@ -273,6 +274,7 @@ struct CoreTests {
                                         remainingWorkDays: 0, updatedAt: evening)
         precondition(noDays.minimumTodayMeter == nil && noDays.minimumTodayFill == 0)
         precondition(noDays.minimumTodayOvertimeMinutes == 0)
+        precondition(noDays.expectedMinutesByNow == minimumMonth.targetMinutes)
         let unevenSnapshot = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
                                                 remainingWorkDays: 2, updatedAt: morning)
         precondition(unevenSnapshot.dailyAverage(for: 721) == 361)
@@ -331,6 +333,27 @@ struct CoreTests {
         print("Core checks passed")
     }
 
+    static func monthlyBaselineChecks() {
+        let dates = ISO8601DateFormatter()
+        for (actual, credited, today, difference) in [(4420, 4420, 420, -380), (6220, 5790, 544, 990)] {
+            var month = MonthlyReport(workedMinutes: actual, outsideMinutes: 0, requiredMinutes: 8640,
+                vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+                startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: nil)
+            month.targetCreditedMinutes = credited
+            for (end, time, remainingDays) in [(nil, "10:00:00", 9), (nil, "19:00:00", 8),
+                                              ("2026-10-19T13:00:00+09:00", "14:00:00", 8)] {
+                let record = DailyRecord(date: "2026-10-19", start: "2026-10-19T09:00:00+09:00", end: end,
+                    scheduledEnd: "2026-10-19T18:00:00+09:00", workedMinutes: today, currentMinutes: today,
+                    holidayStatus: "WEEKDAY_WORKING_ON_NONE_NONE")
+                let snapshot = AttendanceSnapshot(record: record, month: month, remainingWorkDays: remainingDays,
+                    updatedAt: dates.date(from: "2026-10-19T\(time)+09:00")!)
+                precondition(snapshot.expectedMinutesByNow == 4800,
+                             "The same schedule must use an 80-hour baseline regardless of accumulated work or clock-out")
+                precondition(snapshot.paceDifferenceMinutes == difference)
+            }
+        }
+    }
+
     static func flexAccountingChecks() throws {
         var month = MonthlyReport(workedMinutes: 4200, outsideMinutes: 0, requiredMinutes: 9600,
             vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
@@ -344,7 +367,7 @@ struct CoreTests {
             updatedAt: ISO8601DateFormatter().date(from: "2026-10-15T12:17:00+09:00")!)
         snapshot.todayCreditedMinutesInMonth = 0
         precondition(snapshot.minimumTodayMeter?.targetMinutes == 486)
-        precondition(snapshot.expectedMinutesByNow == 4256)
+        precondition(snapshot.expectedMinutesByNow == 4320)
         precondition(snapshot.monthMeter.actualMinutes == 3770)
         precondition(snapshot.overtimeMeter?.actualMinutes == 430)
 

@@ -278,7 +278,7 @@ struct MenuTests {
         precondition(!texts.contains { $0.contains("회사수당기준") || $0.contains("리프레시데이") })
         precondition(texts.contains { $0.contains("출근09:00") })
         precondition(texts.contains { $0.contains("예상퇴근18:00") })
-        precondition(texts.joined().contains("최소목표122시간0분"))
+        precondition(texts.joined().contains("오늘까지기준120시간0분"))
         precondition(texts.joined().contains("필수근무시간-") && texts.joined().contains("(하루평균"))
         precondition(texts.joined().contains("수당기준-"))
         precondition(texts.contains { $0.contains("필수시간대비94%") })
@@ -287,7 +287,7 @@ struct MenuTests {
         precondition(filled(bitmap, x: 400, y: barY) && !filled(bitmap, x: 500, y: barY))
         let monthlyY = monthBarY(bitmap, after: barY)
         precondition(filled(bitmap, x: 480, y: monthlyY) && !filled(bitmap, x: 510, y: monthlyY))
-        precondition(marker(bitmap, minutes: 7320, range: 9600, y: monthlyY, color: .systemRed))
+        precondition(marker(bitmap, minutes: 7200, range: 9600, y: monthlyY, color: .systemRed))
         precondition(marker(bitmap, minutes: 7680, range: 9600, y: monthlyY, color: .systemBlue))
         precondition(marker(bitmap, minutes: 8160, range: 9600, y: monthlyY, color: .systemPurple))
         let filledRows = (0..<bitmap.pixelsHigh).filter { filled(bitmap, x: 40, y: $0) }
@@ -297,6 +297,7 @@ struct MenuTests {
                                   currentMinutes: 480, holidayStatus: workday)
         let (_, reachedTexts) = try await render(reached, name: "reached")
         precondition(reachedTexts.contains("8시간0분/최소6시간0분") && reachedTexts.contains("100%달성"))
+        precondition(reachedTexts.joined().contains("오늘까지기준120시간0분"))
         let (zeroBitmap, zeroTexts) = try await render(working, required: 6600, name: "zero-target")
         precondition(zeroTexts.contains("이번달필수시간달성") && zeroTexts.contains("100%달성"))
         let zeroBarY = (0..<zeroBitmap.pixelsHigh).first { filled(zeroBitmap, x: 40, y: $0) }!
@@ -330,7 +331,7 @@ struct MenuTests {
         precondition(overnightTexts.contains("2026-09-30") && overnightTexts.contains("2026-09"))
         precondition(!overnightTexts.contains("오늘") && !overnightTexts.contains("이번달"))
         precondition(overnightTexts.contains("9시간0분/최소12시간0분"))
-        precondition(overnightTexts.joined().contains("최소목표132시간0분"))
+        precondition(overnightTexts.joined().contains("2026-09-30까지기준132시간0분"))
 
         let (overlapBitmap, overlapTexts) = try await render(working, refreshDay: false, name: "overlapping-markers")
         let overlapY = monthBarY(overlapBitmap, after: barY)

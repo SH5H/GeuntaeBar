@@ -266,8 +266,10 @@ struct FlexTests {
         let plain = try snapshot(f)
         precondition(plain.customHolidayDeduction == nil)
         precondition(wednesdays.remainingWorkDays == 11)
+        precondition(plain.expectedMinutesByNow == 4320 && wednesdays.expectedMinutesByNow == 3840)
         let today = try snapshot(f, customHoliday: CustomHolidayRule(weekday: 5, ordinals: [3]))
         precondition(today.record?.isScheduledWorkday == false && today.month.targetMinutes == 9600 - 480)
+        precondition(today.expectedMinutesByNow == 3840)
         precondition(today.clockInReminderDate(mode: .scheduled, delayMinutes: 0) == nil)
         var history = f
         var historyDays = history["schedules"] as! [String: Any]

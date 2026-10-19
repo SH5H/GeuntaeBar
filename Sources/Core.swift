@@ -464,12 +464,8 @@ struct AttendanceSnapshot {
                          targetMinutes: maximum - month.targetMinutes)
     }
     var expectedMinutesByNow: Int {
-        let expected: Int
-        if record?.isScheduledWorkday == true, let minimum = minimumTodayMeter {
-            expected = month.creditedMinutes - (todayCreditedMinutesInMonth ?? todayMinutes) + minimum.targetMinutes
-        } else {
-            expected = month.targetMinutes - remainingWorkDays * month.dailyRequiredMinutes
-        }
+        let futureWorkDays = max(0, remainingDaysIncludingToday - (record?.isScheduledWorkday == true ? 1 : 0))
+        let expected = month.targetMinutes - futureWorkDays * month.dailyRequiredMinutes
         return min(max(0, expected), max(0, month.targetMinutes))
     }
     var paceFraction: Double {

@@ -1192,7 +1192,7 @@ struct MonthSummary: View {
             }
             let markers: [(position: Double?, color: Color, description: String)] = [
                 (range > 0 ? Double(snapshot.expectedMinutesByNow) / Double(range) : 0, .red,
-                 "최소 목표 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
+                 "\(snapshot.dayTitle)까지 기준 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
                  "\(AttendanceSnapshot.duration(abs(pace))) \(pace >= 0 ? "앞섬" : "부족")"),
                 (range > 0 ? Double(month.targetMinutes) / Double(range) : 0, .blue,
                  month.balance >= 0

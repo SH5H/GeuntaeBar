@@ -24,6 +24,7 @@ struct UpdaterTests {
             cat response
             exit "$(cat status)"
         fi
+        printf '%s\\n' "$3" > requested-revision
         echo progress:download
         echo progress:build
         sleep 0.3
@@ -95,6 +96,8 @@ struct UpdaterTests {
         precondition(updater.installFailed && !updater.isInstalling)
         let installLog = try String(contentsOf: updater.logURL, encoding: .utf8)
         precondition(installLog.contains("Test install failure"))
+        let installedRevision = try String(contentsOf: resources.appendingPathComponent("requested-revision"), encoding: .utf8)
+        precondition(installedRevision == "\(revision)\n")
 
         try response("current")
         await updater.check()
@@ -150,6 +153,8 @@ struct UpdaterTests {
         precondition(promptedCommits == [commits, nextCommits])
         for _ in 0..<200 where prompting.isInstalling { try await Task.sleep(for: .milliseconds(10)) }
         precondition(prompting.installFailed)
+        let promptedRevision = try String(contentsOf: resources.appendingPathComponent("requested-revision"), encoding: .utf8)
+        precondition(promptedRevision == "\(next)\n")
         print("App update checks passed")
     }
 }

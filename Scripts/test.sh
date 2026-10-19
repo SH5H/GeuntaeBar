@@ -5,6 +5,7 @@ build_tmp="$(mktemp -d "${TMPDIR:-/tmp}/geuntae-bar-tests.XXXXXX")"
 trap 'rm -rf "$build_tmp"' EXIT
 trap 'exit 1' HUP INT TERM
 S=Sources T=Tests
+/bin/sh "$T/UpdateScriptTests.sh"
 app="$build_tmp/Geuntae bar.app"
 mkdir -p "$app/Contents/MacOS"
 cp Resources/Info.plist "$app/Contents/Info.plist"

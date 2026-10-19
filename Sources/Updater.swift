@@ -104,7 +104,7 @@ final class AppUpdater: ObservableObject {
     }
 
     func install() {
-        guard availableRevision != nil, !isChecking, !isInstalling else { return }
+        guard let revision = availableRevision, !isChecking, !isInstalling else { return }
         do {
             try FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(),
                                                      withIntermediateDirectories: true)
@@ -114,7 +114,7 @@ final class AppUpdater: ObservableObject {
             let output = Pipe()
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = [scriptURL.path, "install", appURL.path]
+            process.arguments = [scriptURL.path, "install", appURL.path, revision]
             process.standardOutput = output
             process.standardError = output
             try process.run()

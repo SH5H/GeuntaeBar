@@ -1296,7 +1296,7 @@ struct WorkProgressBar: View {
                             path.addLine(to: CGPoint(x: 0.5, y: height))
                         }
                             .stroke(markers[index].color,
-                                    style: StrokeStyle(lineWidth: 1, dash: fill >= position ? [] : [2, 2]))
+                                    style: StrokeStyle(lineWidth: 1, dash: fill >= position ? [2, 2] : []))
                             .frame(width: 1, height: height)
                             .offset(x: min(geometry.size.width - 1,
                                            max(0, geometry.size.width * position - 0.5)),

@@ -19,7 +19,7 @@ struct MenuTests {
         let output = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("geuntae-bar-menu-tests")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 
-        // One-point dashed reference lines turn solid as each threshold is reached.
+        // One-point solid reference lines turn dashed as each threshold is reached.
         for scheme in [ColorScheme.light, .dark] {
             let colors: [Color] = [.red, .blue, .purple]
             let markers = colors.enumerated().map { (position: Optional(Double($0.offset + 1) / 4),
@@ -37,7 +37,7 @@ struct MenuTests {
                         let columns = ((center - 3)...(center + 3)).filter {
                             bitmap.colorAt(x: $0, y: row)! == color
                         }
-                        let solid = fill >= markers[index].position!
+                        let solid = fill < markers[index].position!
                         precondition(columns.count == (solid || row % 8 < 4 ? 2 : 0))
                     }
                 }

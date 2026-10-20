@@ -269,6 +269,8 @@ struct MenuTests {
         // Four hours against a six-hour minimum fills 2/3, rather than the fixed eight-hour 1/2.
         let working = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 240, holidayStatus: workday)
+        let (_, decimalTexts) = try await render(working, required: 7610, name: "daily-required")
+        precondition(decimalTexts.joined().contains("6.8시간"), decimalTexts.joined())
         let (bitmap, texts) = try await render(working, name: "working")
         precondition(texts.contains("4시간0분/최소6시간0분"))
         precondition(texts.contains("67%달성"))
@@ -279,7 +281,6 @@ struct MenuTests {
         precondition(texts.contains { $0.contains("출근09:00") })
         precondition(texts.contains { $0.contains("예상퇴근18:00") })
         precondition(texts.joined().contains("오늘까지기준120시간0분"))
-        precondition(texts.joined().contains("필수근무시간-") && texts.joined().contains("(하루평균"))
         precondition(texts.joined().contains("수당기준-"))
         precondition(texts.contains { $0.contains("필수시간대비94%") })
         precondition(texts.contains { $0.contains("최대160시간0분") })

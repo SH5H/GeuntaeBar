@@ -277,8 +277,22 @@ struct CoreTests {
         precondition(noDays.expectedMinutesByNow == minimumMonth.targetMinutes)
         let unevenSnapshot = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
                                                 remainingWorkDays: 2, updatedAt: morning)
-        precondition(unevenSnapshot.dailyAverage(for: 721) == 361)
-        precondition(noDays.dailyAverage(for: 480) == nil)
+        precondition(unevenSnapshot.remainingWorkDaysAfterToday == 1)
+        precondition(unevenSnapshot.dailyRequiredHours == 721.0 / 60)
+        precondition(noDays.remainingWorkDaysAfterToday == 0 && noDays.dailyRequiredHours == nil)
+        precondition(achieved.dailyRequiredHours == 0)
+        for (day, remainingDays, time) in [(minimumDay, 2, morning), (minimumDay, 1, evening),
+                                          (endedDay, 1, morning), (offDay, 1, morning)] {
+            let future = AttendanceSnapshot(record: day, month: minimumMonth,
+                                            remainingWorkDays: remainingDays, updatedAt: time)
+            precondition(future.remainingWorkDaysAfterToday == 1 && future.dailyRequiredHours == 12)
+        }
+        let lastDay = AttendanceSnapshot(record: minimumDay, month: minimumMonth,
+                                          remainingWorkDays: 1, updatedAt: morning)
+        precondition(lastDay.remainingWorkDaysAfterToday == 0 && lastDay.dailyRequiredHours == nil)
+        var unknown = minimumSnapshot
+        unknown.attendanceKnown = false
+        precondition(unknown.dailyRequiredHours == nil)
         precondition(snapshot.menuTitle == "근무 2시간 30분")
         precondition(AttendanceSnapshot.clock(record.scheduledEnd) == "18:00")
         precondition(AttendanceSnapshot.clock("2026-09-29 18:00:00") == "18:00")

@@ -1185,11 +1185,6 @@ struct MonthSummary: View {
             let liveValue = snapshot.liveWorkClock == nil ? "" :
                 ", 확정 \(AttendanceSnapshot.duration(snapshot.month.creditedMinutes)), 진행 중 \(AttendanceSnapshot.duration(max(0, month.creditedMinutes - snapshot.month.creditedMinutes)))"
             let pace = snapshot.paceDifferenceMinutes
-            // Markdown: rendered with LocalizedStringKey so the remaining and average values are bold.
-            let remaining = { (minutes: Int) in
-                "**\(AttendanceSnapshot.duration(minutes))** (하루 평균 **" +
-                    (snapshot.dailyAverage(for: minutes).map(AttendanceSnapshot.duration) ?? "--") + "**)"
-            }
             let markers: [(position: Double?, color: Color, description: String)] = [
                 (range > 0 ? Double(snapshot.expectedMinutesByNow) / Double(range) : 0, .red,
                  "\(snapshot.dayTitle)까지 기준 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
@@ -1197,11 +1192,11 @@ struct MonthSummary: View {
                 (range > 0 ? Double(month.targetMinutes) / Double(range) : 0, .blue,
                  month.balance >= 0
                   ? "필수 근무시간 - \(AttendanceSnapshot.duration(month.balance)) 초과"
-                  : "필수 근무시간 - \(remaining(month.remainingMinutes))"),
+                  : "필수 근무시간 - **\(AttendanceSnapshot.duration(month.remainingMinutes))**"),
                 (compensation.map { range > 0 ? Double($0.thresholdMinutes) / Double(range) : 0 }, .purple,
                  compensation.map {
                      $0.remainingMinutes > 0
-                      ? "수당 기준 - \(remaining($0.remainingMinutes))"
+                      ? "수당 기준 - **\(AttendanceSnapshot.duration($0.remainingMinutes))**"
                       : "수당 기준 - \(AttendanceSnapshot.duration($0.excessMinutes)) 초과"
                  } ?? "수당 기준 확인 불가")
             ]
@@ -1211,8 +1206,27 @@ struct MonthSummary: View {
                 Text("필수시간 대비 \(snapshot.monthMeter.percent)%")
                     .font(.subheadline.weight(.semibold))
             }
-            Text("누적 \(AttendanceSnapshot.duration(month.actualMinutes)) · 남은 근무일 \(snapshot.remainingWorkDays)일")
+            Text("누적 \(AttendanceSnapshot.duration(month.actualMinutes))")
                 .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("남은 근무일").font(.caption).foregroundStyle(.secondary)
+                    Text("\(snapshot.remainingWorkDaysAfterToday)일")
+                        .font(.headline).monospacedDigit()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("하루 필요").font(.caption).foregroundStyle(.secondary)
+                    Text(snapshot.dailyRequiredHours.map { String(format: "%.1f시간", $0) } ?? "—")
+                        .font(.headline).monospacedDigit()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(10)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            Text("오늘 제외 · 남은 필수시간 기준")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
             WorkProgressBar(fill: meter.fillFraction, markers: markers,
                             value: "필수시간 반영 \(AttendanceSnapshot.duration(month.creditedMinutes)), 필수시간 대비 \(snapshot.monthMeter.percent)%" + liveValue,

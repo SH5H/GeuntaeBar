@@ -173,6 +173,10 @@ struct MenuTests {
                                     precondition(matches(pixel, color) == (color == expected),
                                                  "\(appearanceName.rawValue) \(name) ended=\(finished) hour \(hour) at \(p)")
                                 }
+                                if expected == nil {
+                                    precondition(matches(pixel, .white),
+                                                 "Unfilled donut must be opaque white: \(appearanceName.rawValue) \(name)")
+                                }
                                 if finished {
                                     let inner = ringPixel(bitmap, hours: green.count, hour: hour, at: p, radius: 5.5)
                                     precondition(matches(inner, .systemGray) == (p < bounds[2]))
@@ -188,6 +192,9 @@ struct MenuTests {
                                          name: "started-zero", appearance: appearance)
             precondition(before.colorAt(x: 18, y: 18)!.alphaComponent > 0.1)
             precondition(started.colorAt(x: 18, y: 18)!.alphaComponent == 0)
+            for hour in 0..<6 {
+                precondition(matches(ringPixel(before, hours: 6, hour: hour, at: 0.5, radius: 6.5), .white))
+            }
             var unknown = waiting
             unknown.attendanceKnown = false
             let missing = try renderIcon(unknown, name: "unknown-attendance", appearance: appearance)

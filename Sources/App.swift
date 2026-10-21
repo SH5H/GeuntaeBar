@@ -913,7 +913,7 @@ struct LaunchLabel: View {
         }
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             for hour in 0..<hours {
-                NSColor.tertiaryLabelColor.setFill()
+                NSColor.white.setFill()
                 arc(hour, 1)
                 if waiting { continue }
                 let capacity = meter != nil && target > 0 ? min(60, target - hour * 60) : 60

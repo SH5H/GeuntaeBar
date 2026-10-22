@@ -18,3 +18,8 @@ git clone https://github.com/SH5H/GeuntaeBar.git
 cd GeuntaeBar
 ./install.sh
 ```
+
+## flex 재연결
+
+저장된 세션의 자동 갱신이 인증 오류(`400 / AUTH_400_000`)로 거절되면 **flex 재연결이 필요합니다**로 안내합니다.
+설정에서 **flex 다시 로그인**으로 연결을 복구할 수 있습니다. 일반 조회 오류나 서버 장애는 기존 로그인을 유지합니다.

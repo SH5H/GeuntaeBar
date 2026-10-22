@@ -296,13 +296,14 @@ struct FlexTests {
         }
         _ = try await api.get("/api/v2/workspace/users/me/workspace-users")
         precondition(api.currentCookies().contains { $0.value == "rotated" && $0.isHTTPOnly })
-        for code in [401, 403, 429, 302, 500] {
+        for code in [400, 401, 403, 429, 302, 500] {
             let test = client()
-            FlexStubProtocol.handler = { _ in (code, Data("{}".utf8), ["Retry-After": "1"]) }
+            FlexStubProtocol.handler = { _ in (code, Data(#"{"code":"AUTH_400_000"}"#.utf8), ["Retry-After": "1"]) }
             do { _ = try await test.get("/api/v2/test"); preconditionFailure("HTTP errors must fail") }
             catch let error as FlexError {
                 switch (code, error) {
-                case (401, .authentication), (302, .authentication), (403, .permissionDenied), (429, .rateLimited), (500, .httpStatus(500)): break
+                case (400, .httpStatus(400)), (401, .authentication), (302, .authentication), (403, .permissionDenied),
+                     (429, .rateLimited), (500, .httpStatus(500)): break
                 default: preconditionFailure("Wrong error")
                 }
             }
@@ -361,12 +362,13 @@ struct FlexTests {
             precondition(api.currentCookies().contains { $0.name == "V2_WS_RID" && $0.value == "refresh-new" && $0.isSecure })
             precondition(api.currentCookies().contains { $0.name == "AID" && $0.value == "access-new" && $0.expiresDate! > Date() })
         }
-        for status in [200, 401, 500] {
+        for status in [200, 400, 401, 500] {
             let api = client()
             api.restore(saved)
             FlexStubProtocol.requests = []
             FlexStubProtocol.handler = { request in
-                request.url!.path == refreshPath ? (status, renewed, [:]) : (401, Data("{}".utf8), [:])
+                let body = status == 400 ? Data(#"{"code":"AUTH_400_000","message":"올바른 요청이 아니예요. 다시 시도해 주세요."}"#.utf8) : renewed
+                return request.url!.path == refreshPath ? (status, body, [:]) : (401, Data("{}".utf8), [:])
             }
             do { _ = try await api.get("/api/v2/test"); preconditionFailure("Rejected sessions must fail without looping") }
             catch FlexError.authentication { precondition(status != 500) }
@@ -374,6 +376,13 @@ struct FlexTests {
             precondition(FlexStubProtocol.requests.count == (status == 200 ? 3 : 2))
             if status == 500 { precondition(api.currentCookies().contains { $0.name == "V2_WS_RID" }) }
         }
+        let badRequest = client()
+        badRequest.restore(saved)
+        FlexStubProtocol.handler = { request in
+            request.url!.path == refreshPath ? (400, Data("{}".utf8), [:]) : (401, Data("{}".utf8), [:])
+        }
+        do { _ = try await badRequest.get("/api/v2/test"); preconditionFailure("Other bad requests must not sign out") }
+        catch FlexError.httpStatus(400) {}
         let pending = client()
         pending.restore(saved)
         FlexStubProtocol.handler = { _ in

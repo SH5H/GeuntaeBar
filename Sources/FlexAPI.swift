@@ -123,6 +123,13 @@ final class FlexClient {
         switch response.statusCode {
         case 200..<300: break
         case 300..<400, 401: throw FlexError.authentication
+        case 400:
+            let problem = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            if url.path == "/api-public/v2/auth/tokens/customer-user/refresh",
+               problem?["code"] as? String == "AUTH_400_000" {
+                throw FlexError.authentication
+            }
+            throw FlexError.httpStatus(400)
         case 403: throw FlexError.permissionDenied
         case 429:
             let delay = response.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init) ?? 60

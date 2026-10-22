@@ -460,6 +460,12 @@ struct LoginTests {
         error = FlexError.permissionDenied
         _ = await model.refresh()
         precondition(model.snapshot?.service == .flex && model.hasSavedSession && model.message.contains("권한"))
+        error = FlexError.invalidData("퇴근 기록에 대응하는 근무 내역이 없습니다.")
+        _ = await model.refresh()
+        precondition(model.hasSavedSession && model.snapshot?.service == .flex && !model.loginCompleted)
+        precondition(model.loginFailureMessage?.contains("퇴근 기록에 대응하는 근무 내역이 없습니다") == true)
+        let retainedSession = try flexVault.load()
+        precondition(!retainedSession.isEmpty)
         error = nil
         hold = true
         let late = Task { await model.refresh() }

@@ -2,13 +2,14 @@ import Foundation
 
 
 enum FlexError: LocalizedError {
-    case authentication, permissionDenied, rateLimited, inconsistent, httpStatus(Int)
+    case authentication, permissionDenied, rateLimited, httpStatus(Int)
+    case invalidData(String)
     var errorDescription: String? {
         switch self {
         case .authentication: "flex 로그인이 만료되었습니다. 다시 로그인해주세요."
         case .permissionDenied: "flex 근태 조회 권한을 확인해주세요."
         case .rateLimited: "flex 호출 한도에 도달했습니다. 잠시 후 다시 조회합니다."
-        case .inconsistent: "flex 근태 정보 확인 불가 · 다음 갱신에서 다시 확인합니다."
+        case .invalidData(let reason): "flex 근태 정보 확인 불가 · \(reason)"
         case .httpStatus(let status): "flex API 응답 오류 (\(status))"
         }
     }
@@ -62,7 +63,7 @@ final class FlexClient {
 
     func get(_ path: String, query: [URLQueryItem] = []) async throws -> Data {
         var components = URLComponents(string: "https://flex.team")!
-        guard path.hasPrefix("/api/v2/") || path.hasPrefix("/api/v3/") else { throw FlexError.inconsistent }
+        guard path.hasPrefix("/api/v2/") || path.hasPrefix("/api/v3/") else { throw FlexError.invalidData("근태 조회 요청을 만들지 못했습니다.") }
         components.path = path
         components.queryItems = query.isEmpty ? nil : query
         let url = components.url!
@@ -111,7 +112,7 @@ final class FlexClient {
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard revision == attempt else { throw CancellationError() }
-        guard let response = response as? HTTPURLResponse else { throw FlexError.inconsistent }
+        guard let response = response as? HTTPURLResponse else { throw FlexError.invalidData("서버 응답을 확인하지 못했습니다.") }
         let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, item in
             if let key = item.key as? String, let value = item.value as? String { result[key] = value }
         }
@@ -129,7 +130,7 @@ final class FlexClient {
             throw FlexError.rateLimited
         default: throw FlexError.httpStatus(response.statusCode)
         }
-        guard response.mimeType == "application/json" else { throw FlexError.inconsistent }
+        guard response.mimeType == "application/json" else { throw FlexError.invalidData("서버가 근태 데이터 대신 다른 형식의 응답을 보냈습니다.") }
         return data
     }
 
@@ -161,7 +162,7 @@ final class FlexClient {
             let expires = try FlexDates.parse(token.expireAt)
             guard !token.token.isEmpty, expires > Date(), let cookie = HTTPCookie(properties: [
                 .name: name, .value: token.token, .domain: "flex.team", .path: "/", .secure: "TRUE", .expires: expires
-            ]) else { throw FlexError.inconsistent }
+            ]) else { throw FlexError.invalidData("로그인 갱신 응답의 토큰 또는 유효기간을 확인하지 못했습니다.") }
             cookies.removeAll { $0.name == name && $0.domain == cookie.domain && $0.path == cookie.path }
             cookies.append(cookie)
         }
@@ -183,14 +184,14 @@ final class FlexClient {
         let user = identity.currentUser.user
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
         guard [user.userIdHash, user.customerIdHash].allSatisfy({ !$0.isEmpty && $0.count <= 100 && $0.unicodeScalars.allSatisfy(allowed.contains) }) else {
-            throw FlexError.inconsistent
+            throw FlexError.invalidData("계정의 회사 또는 사용자 식별 정보를 확인하지 못했습니다.")
         }
         let ruleBase = "/api/v2/work-rule/users/\(user.userIdHash)"
         let scheduleBase = "/api/v3/time-tracking/users/\(user.userIdHash)/work-schedules"
         let serverTime: FlexServerTime = try await load("/api/v2/time-tracking/current-time")
         let serverClockOffset = ServerClock(serverTime: try FlexDates.timestamp(serverTime.timeStamp), deviceTime: Date()).offset
         let status: FlexClockStatus = try await load("/api/v2/time-tracking/work-clock/users/\(user.userIdHash)/current-status")
-        guard let zone = TimeZone(identifier: status.appliedZoneId) else { throw FlexError.inconsistent }
+        guard let zone = TimeZone(identifier: status.appliedZoneId) else { throw FlexError.invalidData("적용된 근무 시간대를 확인하지 못했습니다.") }
         let workDate = status.onGoingRecordPack?.onGoing == true
             ? FlexDates.key(try FlexDates.timestamp(status.onGoingRecordPack!.startRecord.targetTime), in: zone)
             : status.targetDate
@@ -206,30 +207,30 @@ final class FlexClient {
             [URLQueryItem(name: "from", value: from), URLQueryItem(name: "to", value: to),
              URLQueryItem(name: "timezone", value: period.period.zoneId)]
         }
-        guard summary.userIdHash == user.userIdHash else { throw FlexError.inconsistent }
+        guard summary.userIdHash == user.userIdHash else { throw FlexError.invalidData("월간 집계의 사용자와 로그인 계정이 다릅니다.") }
         let today: FlexDailySummary = try await load(scheduleBase + "/summary/by-date-range", query: query(workDate, workDate))
         let start = try FlexDates.day(period.period.from, in: zone)
         let end = try FlexDates.day(period.period.to, in: zone)
         guard end >= start, end.timeIntervalSince(start) <= 366 * 86400,
               try FlexDates.timestamp(Double(period.period.applyTimeRangeFrom)) == start,
               try FlexDates.timestamp(Double(period.period.applyTimeRangeTo)) == FlexDates.calendar(in: zone).date(byAdding: .day, value: 1, to: end) else {
-            throw FlexError.inconsistent
+            throw FlexError.invalidData("정산 기간의 날짜와 시작·종료 시각이 맞지 않습니다.")
         }
         let historyStart = includePreviousPeriod ? FlexDates.calendar(in: zone).date(byAdding: .month, value: -1, to: start)! : start
         var schedules: [FlexSchedule] = [], attributes: [FlexDayAttribute] = []
         for (from, to) in FlexDates.ranges(from: historyStart, through: end, in: zone) {
             let days: FlexSchedules = try await load(scheduleBase, query: query(from, to))
             let dates: FlexDayAttributes = try await load(scheduleBase + "/date-attributes", query: query(from, to))
-            guard days.userIdHash == user.userIdHash else { throw FlexError.inconsistent }
+            guard days.userIdHash == user.userIdHash else { throw FlexError.invalidData("근무 일정의 사용자와 로그인 계정이 다릅니다.") }
             schedules += days.dailySchedules
             attributes += dates.workingDayAttributes
         }
         let rule: FlexUserRule = try await load(ruleBase + "/work-rules/by-date/" + workDate)
         guard !rule.workRule.customerWorkRuleId.isEmpty,
-              rule.workRule.customerWorkRuleId.allSatisfy(\.isNumber) else { throw FlexError.inconsistent }
+              rule.workRule.customerWorkRuleId.allSatisfy(\.isNumber) else { throw FlexError.invalidData("적용된 근무 규칙의 식별 정보를 확인하지 못했습니다.") }
         let rules: FlexRules = try await load("/api/v2/work-rule/customers/\(user.customerIdHash)/work-rules/\(rule.workRule.customerWorkRuleId)")
         guard let companyRule = rules.workRules.first(where: { $0.customerWorkRuleId == rule.workRule.customerWorkRuleId }),
-              revision == attempt else { throw FlexError.inconsistent }
+              revision == attempt else { throw FlexError.invalidData("적용된 회사 근무 규칙을 찾지 못했습니다.") }
         let account = user.customerIdHash + ":" + user.userIdHash
         let build = { (holiday: CustomHolidayRule?) throws -> AttendanceSnapshot in
             var result = try FlexAttendance.snapshot(period: period.period, summary: summary, today: today,

@@ -165,9 +165,9 @@ struct FlexTests {
         stopped.advanceLiveTime(to: finished.updatedAt.addingTimeInterval(120))
         precondition(stopped.todayMinutes == finished.todayMinutes && stopped.liveWorkClock == nil)
 
-        func rejected(_ copy: [String: Any]) throws {
+        func rejected(_ copy: [String: Any], reason: String) throws {
             do { _ = try snapshot(copy); preconditionFailure("Inconsistent responses must not become zero work") }
-            catch FlexError.inconsistent {}
+            catch { precondition(error.localizedDescription.contains(reason), error.localizedDescription) }
         }
         var incomplete = f
         status = incomplete["status"] as! [String: Any]
@@ -175,7 +175,7 @@ struct FlexTests {
         pack["onGoing"] = false
         pack["stopRecord"] = ["eventType": "STOP", "recordType": "RECORD", "targetTime": try stamp("2026-10-15T12:00:00")]
         status["onGoingRecordPack"] = pack; incomplete["status"] = status
-        try rejected(incomplete)
+        try rejected(incomplete, reason: "퇴근 기록에 대응하는 근무 내역이 없습니다")
         var completed = incomplete
         status = completed["status"] as! [String: Any]
         status["requestedAt"] = try stamp("2026-10-15T19:00:00")
@@ -217,11 +217,11 @@ struct FlexTests {
         precondition(beforeClockOut.displayMonth.creditedMinutes == clockedOut.displayMonth.creditedMinutes)
         completedDays[todayIndex]["timeBlocks"] = try [block("WORK", "09:53:00", "18:53:00"), block("WORK", "10:00:00", "11:00:00")]
         completedSchedules["dailySchedules"] = completedDays; completed["schedules"] = completedSchedules
-        try rejected(completed)
+        try rejected(completed, reason: "확정된 근무 기록끼리 시간이 겹칩니다")
         var missing = f, dates = missing["attributes"] as! [String: Any]
         dates["workingDayAttributes"] = Array((dates["workingDayAttributes"] as! [[String: Any]]).dropFirst())
         missing["attributes"] = dates
-        try rejected(missing)
+        try rejected(missing, reason: "정산 기간의 일부 날짜에 근무 정보가 없습니다")
 
         var leave = f
         status = leave["status"] as! [String: Any]
@@ -309,7 +309,7 @@ struct FlexTests {
         }
         FlexStubProtocol.handler = { _ in (200, Data("<html>sign in</html>".utf8), ["Content-Type": "text/html"]) }
         do { _ = try await client().get("/api/v2/test"); preconditionFailure("HTML must not become attendance") }
-        catch FlexError.inconsistent {}
+        catch FlexError.invalidData(let reason) { precondition(reason.contains("다른 형식의 응답")) }
         let pending = client()
         FlexStubProtocol.hold = true
         let task = Task { try await pending.get("/api/v2/test") }

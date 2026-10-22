@@ -134,6 +134,7 @@ struct OnboardingWindow: View {
                 VStack(spacing: 0) {
                     LoginWebView(model: model, loadState: $loginPageState)
                         .id("\(model.selectedService.rawValue)-\(loginAttempt)")
+                        .id(ObjectIdentifier(model.loginWebDataStore))
                     Divider()
                     HStack(spacing: 8) {
                         if model.isRefreshing || loginPageState == .loading {

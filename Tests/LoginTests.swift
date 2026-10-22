@@ -14,6 +14,7 @@ final class StatusClickRecorder: NSObject {
 @main
 struct LoginTests {
     static func main() async throws {
+        try await flexWebLogoutChecks()
         let epoch = SessionEpoch()
         _ = epoch.begin()
         async let firstWaiter = epoch.quiesce()
@@ -127,7 +128,7 @@ struct LoginTests {
         var logoutLoads = 0
         var logoutSaves = 0
         let logoutModel = WorkBarModel(wantedSpace: WantedSpaceBackend(vault: logoutVault, client: AttendanceClient(cookies: storage),
-                                       webCookieStore: webStore, snapshotLoader: { _ in
+                                       webDataStore: webDataStore, snapshotLoader: { _ in
             logoutLoads += 1
             let fresh: AttendanceSnapshot
             if logoutLoads == 1 {
@@ -408,6 +409,60 @@ struct LoginTests {
         precondition(model.snapshot == nil)
     }
 
+    static func flexWebLogoutChecks() async throws {
+        let suite = "geuntae-flex-web-logout-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(false, forKey: "clockInRemindersEnabled")
+        let vault = KeychainSession(service: suite, attendanceService: .flex)
+        defer { try? vault.delete(); defaults.removePersistentDomain(forName: suite) }
+        let webData = WKWebsiteDataStore.nonPersistent()
+        let month = MonthlyReport(workedMinutes: 0, outsideMinutes: 0, requiredMinutes: 480,
+            vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+            startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: nil)
+        var snapshot = AttendanceSnapshot(record: nil, month: month, remainingWorkDays: 1, updatedAt: Date())
+        snapshot.service = .flex
+        let backend = FlexBackend(vault: vault, webDataStore: webData,
+                                  snapshotLoader: { _, _ in snapshot })
+        let model = WorkBarModel(flex: backend, defaults: defaults, service: .flex)
+        let signedInSession = model.loginWebDataStore
+        precondition(signedInSession === webData)
+        let cookie = HTTPCookie(properties: [.name: "AID", .value: "logout-test", .domain: "flex.team", .path: "/"])!
+        await webData.httpCookieStore.setCookie(cookie)
+        await model.acceptCookies([cookie])
+        precondition(model.loginCompleted)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = webData
+        let oldPage = WKWebView(frame: .zero, configuration: configuration)
+        let oldCoordinator = LoginWebView.Coordinator(model: model) { _ in }
+        oldCoordinator.watch(oldPage)
+        defer { oldCoordinator.stop() }
+        precondition(oldCoordinator.isActive)
+        await model.signOut()
+        let nextSession = model.loginWebDataStore
+        precondition(nextSession !== signedInSession && !nextSession.isPersistent,
+                     "Logging out must discard the signed-in page's browser session")
+        precondition(!oldCoordinator.isActive && !model.hasSavedSession && model.loginCookies.isEmpty)
+        let saved = try vault.load()
+        precondition(saved.isEmpty)
+        // A still-running old page must not sign the new login window back in.
+        await webData.httpCookieStore.setCookie(cookie)
+        model.beginSignIn()
+        let newCookies = await nextSession.httpCookieStore.allCookies()
+        precondition(newCookies.isEmpty && !oldCoordinator.isActive && !model.loginCompleted)
+        await nextSession.httpCookieStore.setCookie(cookie)
+        await model.acceptCookies([cookie])
+        precondition(model.loginCompleted && model.hasSavedSession)
+        precondition(model.loginWebDataStore === nextSession)
+        let relaunched = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }),
+                                      defaults: defaults, service: .flex)
+        precondition(!relaunched.loginWebDataStore.isPersistent && relaunched.hasSavedSession)
+        precondition(relaunched.loginCookies.contains { $0.name == cookie.name })
+        _ = await relaunched.refresh()
+        let restoredCookies = await relaunched.loginWebDataStore.httpCookieStore.allCookies()
+        precondition(relaunched.loginCompleted && restoredCookies.contains { $0.name == cookie.name })
+        await model.signOut()
+    }
+
     static func flexServiceChecks() async throws {
         let suite = "geuntae-flex-model-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -441,9 +496,9 @@ struct LoginTests {
         var wantedSaves = 0
         let model = WorkBarModel(
             wantedSpace: WantedSpaceBackend(vault: vault, client: AttendanceClient(cookies: storage),
-                webCookieStore: webData.httpCookieStore,
+                webDataStore: webData,
                 snapshotLoader: { _ in wanted }, sessionSaver: { _ in wantedSaves += 1 }),
-            flex: FlexBackend(vault: flexVault, webCookieStore: webData.httpCookieStore, snapshotLoader: { _, _ in
+            flex: FlexBackend(vault: flexVault, webDataStore: webData, snapshotLoader: { _, _ in
                 if let error { throw error }
                 if hold { return await withCheckedContinuation { pending = $0 } }
                 return flex

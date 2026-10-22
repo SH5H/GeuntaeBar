@@ -116,6 +116,7 @@ enum RefreshFailure {
 @MainActor
 protocol AttendanceBackend: AnyObject {
     var currentCookies: [HTTPCookie] { get }
+    var webDataStore: WKWebsiteDataStore { get }
     /// Restores the saved session into the client; returns whether one exists.
     func restoreSession() throws -> Bool
     /// Adopts cookies from the web login; returns false when none belong to this backend.
@@ -135,18 +136,19 @@ protocol AttendanceBackend: AnyObject {
 final class WantedSpaceBackend: AttendanceBackend {
     private let vault: KeychainSession
     private let client: AttendanceClient
-    private let webCookieStore: WKHTTPCookieStore
+    let webDataStore: WKWebsiteDataStore
+    private var webCookieStore: WKHTTPCookieStore { webDataStore.httpCookieStore }
     private let snapshotLoader: (Bool) async throws -> AttendanceSnapshot
     private let sessionSaver: ([HTTPCookie]) throws -> Void
 
     init(vault: KeychainSession = KeychainSession(legacyService: "ai.wantedspace.WorkBar.v2"),
          client: AttendanceClient = AttendanceClient(),
-         webCookieStore: WKHTTPCookieStore? = nil,
+         webDataStore: WKWebsiteDataStore? = nil,
          snapshotLoader: ((Bool) async throws -> AttendanceSnapshot)? = nil,
          sessionSaver: (([HTTPCookie]) throws -> Void)? = nil) {
         self.vault = vault
         self.client = client
-        self.webCookieStore = webCookieStore ?? WKWebsiteDataStore.default().httpCookieStore
+        self.webDataStore = webDataStore ?? .default()
         self.snapshotLoader = snapshotLoader ?? { try await client.snapshot(includePreviousMonth: $0) }
         self.sessionSaver = sessionSaver ?? { _ = try vault.save($0) }
     }
@@ -191,7 +193,8 @@ final class WantedSpaceBackend: AttendanceBackend {
 final class FlexBackend: AttendanceBackend {
     private let vault: KeychainSession
     private let client: FlexClient
-    private let webCookieStore: WKHTTPCookieStore
+    private(set) var webDataStore: WKWebsiteDataStore
+    private var webCookieStore: WKHTTPCookieStore { webDataStore.httpCookieStore }
     private let snapshotLoader: (Bool, CustomHolidayRule?) async throws -> AttendanceSnapshot
     private let sessionSaver: ([HTTPCookie]) throws -> Void
 
@@ -200,13 +203,13 @@ final class FlexBackend: AttendanceBackend {
                  KeychainSession.Item(service: "ai.wantedspace.WorkBar.flex", account: "flex-credentials")
              ]),
          client: FlexClient? = nil,
-         webCookieStore: WKHTTPCookieStore? = nil,
+         webDataStore: WKWebsiteDataStore? = nil,
          snapshotLoader: ((Bool, CustomHolidayRule?) async throws -> AttendanceSnapshot)? = nil,
          sessionSaver: (([HTTPCookie]) throws -> Void)? = nil) {
         self.vault = vault
         let client = client ?? FlexClient()
         self.client = client
-        self.webCookieStore = webCookieStore ?? WKWebsiteDataStore.default().httpCookieStore
+        self.webDataStore = webDataStore ?? .nonPersistent()
         self.snapshotLoader = snapshotLoader ?? { try await client.snapshot(includePreviousPeriod: $0, customHoliday: $1) }
         self.sessionSaver = sessionSaver ?? { _ = try vault.save($0) }
     }
@@ -261,8 +264,10 @@ final class FlexBackend: AttendanceBackend {
     func signOut() async throws {
         try vault.delete()
         client.clearCookies()
-        for cookie in await webCookieStore.allCookies() where SavedCookie(cookie).belongsTo(.flex) {
-            await webCookieStore.deleteCookie(cookie)
+        let signedInStore = webDataStore
+        webDataStore = .nonPersistent()
+        for cookie in await signedInStore.httpCookieStore.allCookies() where SavedCookie(cookie).belongsTo(.flex) {
+            await signedInStore.httpCookieStore.deleteCookie(cookie)
         }
     }
     func cancelRequests() async { await client.cancelRequests() }
@@ -315,7 +320,7 @@ final class WorkBarModel: ObservableObject {
 
     private let wantedSpace: AttendanceBackend
     private let flex: AttendanceBackend
-    let loginWebDataStore = WKWebsiteDataStore.default()
+    var loginWebDataStore: WKWebsiteDataStore { backend.webDataStore }
     private let preferences: Preferences
     private let notificationAuthorizationStatus: () async -> UNAuthorizationStatus
     private let requestNotificationAuthorization: () async throws -> Bool
@@ -672,6 +677,7 @@ struct LoginWebView: NSViewRepresentable {
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.stop()
         webView.navigationDelegate = nil
+        webView.stopLoading()
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
@@ -683,11 +689,15 @@ struct LoginWebView: NSViewRepresentable {
         private var timer: Timer?
         private var didAttemptSignIn = false
         private let service: AttendanceService
-        var isActive: Bool { timer != nil }
+        private let webDataStore: WKWebsiteDataStore
+        var isActive: Bool {
+            timer != nil && model.selectedService == service && model.loginWebDataStore === webDataStore
+        }
 
         init(model: WorkBarModel, onLoadStateChange: @escaping (LoadState) -> Void) {
             self.model = model
             self.service = model.selectedService
+            self.webDataStore = model.loginWebDataStore
             self.onLoadStateChange = onLoadStateChange
         }
 
@@ -727,7 +737,7 @@ struct LoginWebView: NSViewRepresentable {
         }
 
         private func checkLogin(_ webView: WKWebView) {
-            guard timer != nil, !didAttemptSignIn, loadState == .ready,
+            guard isActive, !didAttemptSignIn, loadState == .ready,
                   !model.loginCompleted, !model.isRefreshing, !model.isSigningOut,
                   model.selectedService == service, let url = webView.url else { return }
             let ready = service == .flex
@@ -736,9 +746,9 @@ struct LoginWebView: NSViewRepresentable {
                     (url.path.hasPrefix("/work/") && webView.title?.contains("근무/휴가") == true))
             guard ready else { return }
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-                guard let self, self.timer != nil else { return }
+                guard let self, self.isActive else { return }
                 Task { @MainActor in
-                    guard self.timer != nil, !self.didAttemptSignIn,
+                    guard self.isActive, !self.didAttemptSignIn,
                           self.model.selectedService == self.service,
                           !self.model.isRefreshing, !self.model.isSigningOut else { return }
                     self.didAttemptSignIn = true
@@ -761,6 +771,7 @@ struct LoginWindow: View {
             Group {
                 LoginWebView(model: model, loadState: $loadState)
                     .id("\(model.selectedService.rawValue)-\(loginAttempt)")
+                    .id(ObjectIdentifier(model.loginWebDataStore))
                 HStack {
                     if case .failed(let message) = loadState {
                         Text(message)

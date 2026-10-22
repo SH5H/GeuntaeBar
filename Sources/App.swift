@@ -961,7 +961,9 @@ struct WorkOptionsWindow: View {
             Section("계정") {
                 AttendanceServicePicker(model: model)
                 HStack {
-                    Text(model.hasSavedSession ? "\(model.selectedService.name) 연결됨" : "로그인이 필요합니다")
+                    Text(model.isRefreshing ? "근태 확인 중…"
+                         : model.loginCompleted ? "\(model.selectedService.name) 연결됨"
+                         : model.hasSavedSession ? "근태 확인 필요" : "로그인이 필요합니다")
                     Spacer()
                     if model.hasSavedSession {
                         Button("이 앱에서 로그아웃") { Task { await model.signOut() } }
@@ -975,6 +977,16 @@ struct WorkOptionsWindow: View {
                             NSApplication.shared.activate(ignoringOtherApps: true)
                         }
                         .disabled(model.isSigningOut)
+                    }
+                }
+                if let message = model.loginFailureMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if model.hasSavedSession {
+                        Button("다시 조회") { Task { await model.refresh() } }
+                            .disabled(model.isSigningOut || model.isRefreshing)
                     }
                 }
                 if model.selectedService == .flex && model.hasSavedSession {

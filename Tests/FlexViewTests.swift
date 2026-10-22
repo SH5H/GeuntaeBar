@@ -30,7 +30,11 @@ struct FlexViewTests {
         snapshot.customHolidayDeduction = CustomHolidayDeduction(dates: ["2026-10-14", "2026-10-28"], minutes: 960,
             maximumMinutes: 960, flexRequiredMinutes: 10560, flexMaximumMinutes: 14772)
         defaults.set(false, forKey: "clockInRemindersEnabled")
-        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }),
+        var fetchError: Error?
+        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in
+            if let fetchError { throw fetchError }
+            return snapshot
+        }),
             defaults: defaults, service: .flex)
         let output = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("geuntae-flex-views")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
@@ -81,6 +85,18 @@ struct FlexViewTests {
                                      "options", width: 440, height: 640)
         // The preview bar sits right under the deduction checkboxes.
         precondition(optionsText.contains("차감대상") && optionsText.contains("필수시간대비42%"), optionsText)
+        precondition(optionsText.contains("flex연결됨"), optionsText)
+        fetchError = FlexError.inconsistent
+        _ = await model.refresh()
+        precondition(model.hasSavedSession && !model.loginCompleted)
+        let failedOptions = try render(WorkOptionsWindow(model: model, onboarding: OnboardingState(defaults: defaults), updater: updater),
+                                       "options-fetch-failed", width: 440, height: 760)
+        precondition(failedOptions.contains("근태정보확인불가") && failedOptions.contains("다시조회") && !failedOptions.contains("flex연결됨"), failedOptions)
+        fetchError = nil
+        _ = await model.refresh()
+        let recoveredOptions = try render(WorkOptionsWindow(model: model, onboarding: OnboardingState(defaults: defaults), updater: updater),
+                                          "options-fetch-recovered", width: 440, height: 640)
+        precondition(recoveredOptions.contains("flex연결됨") && !recoveredOptions.contains("근태정보확인불가"), recoveredOptions)
         let onboarding = OnboardingState(defaults: defaults)
         onboarding.show(); onboarding.showSignIn()
         model.beginSignIn()

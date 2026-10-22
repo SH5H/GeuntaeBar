@@ -147,6 +147,7 @@ final class KeychainSession {
     }
 
     func delete() throws {
+        lastSavedCookies = nil
         for service in [service, legacyService].compactMap({ $0 }) {
             var request = query
             request[kSecAttrService as String] = service
@@ -156,7 +157,6 @@ final class KeychainSession {
             }
         }
         try purgeLegacyItems()
-        lastSavedCookies = nil
     }
 }
 

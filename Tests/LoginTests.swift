@@ -584,12 +584,26 @@ struct LoginTests {
             startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: nil)
         var snapshot = AttendanceSnapshot(record: nil, month: month, remainingWorkDays: 1, updatedAt: Date())
         snapshot.service = .flex
-        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }, sessionSaver: { _ in }),
+        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }),
             defaults: defaults, service: .flex)
         let refreshed = await model.refresh()
         precondition(refreshed && model.snapshot?.service == .flex && model.loginCompleted)
+        let signedInStore = model.loginWebDataStore
+        let cookie = HTTPCookie(properties: [.name: "AID", .value: "purge-failure-test", .domain: "flex.team", .path: "/"])!
+        await signedInStore.httpCookieStore.setCookie(cookie)
+        await model.acceptCookies([cookie])
+        let savedCookies = model.loginCookies
         await model.signOut()
         precondition(model.message == "Keychain 삭제 실패")
+        precondition(model.loginWebDataStore !== signedInStore && model.loginCookies.isEmpty,
+                     "A Keychain deletion error must not leave the web page signed in")
+        precondition(model.loginFailureMessage?.contains("키체인") == true)
+        let browserCookies = await signedInStore.httpCookieStore.allCookies()
+        precondition(!browserCookies.contains { SavedCookie($0).belongsTo(.flex) })
+        let resaved = try vault.save(savedCookies)
+        precondition(resaved, "A partial logout must not skip saving the next login's unchanged cookies")
+        let restored = try vault.load()
+        precondition(restored.contains { $0.name == cookie.name })
     }
 
 }

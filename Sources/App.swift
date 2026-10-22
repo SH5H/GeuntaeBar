@@ -262,13 +262,13 @@ final class FlexBackend: AttendanceBackend {
         }
     }
     func signOut() async throws {
-        try vault.delete()
         client.clearCookies()
         let signedInStore = webDataStore
         webDataStore = .nonPersistent()
         for cookie in await signedInStore.httpCookieStore.allCookies() where SavedCookie(cookie).belongsTo(.flex) {
             await signedInStore.httpCookieStore.deleteCookie(cookie)
         }
+        try vault.delete()
     }
     func cancelRequests() async { await client.cancelRequests() }
 }
@@ -629,6 +629,7 @@ final class WorkBarModel: ObservableObject {
         do { try await backend.signOut() }
         catch {
             message = "Keychain 삭제 실패"
+            loginFailureMessage = "저장된 로그인 정보를 삭제하지 못했어요. macOS 키체인 접근을 확인하고 다시 로그아웃해주세요."
             return
         }
         hasSavedSession = false

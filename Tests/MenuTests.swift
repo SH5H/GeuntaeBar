@@ -263,7 +263,6 @@ struct MenuTests {
         precondition(texts.joined().contains("예상퇴근18:00"))
         precondition(texts.joined().contains("필수시간대비94%"))
         precondition(texts.joined().contains("최대160시간0분"))
-        precondition(!texts.joined().contains("더필요"))
         let overtime = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 600, holidayStatus: workday)
         let overtimeMonth = MonthlyReport(workedMinutes: 6960 + 600, outsideMinutes: 0,
@@ -297,14 +296,23 @@ struct MenuTests {
         let before = DailyRecord(date: date, scheduledEnd: scheduledEnd, holidayStatus: workday)
         let (_, beforeTexts) = try await render(before, name: "before-clock-in")
         precondition(beforeTexts.joined().contains("0%달성"))
-        let (_, remainingTexts) = try await render(before, required: 7710, name: "before-remaining")
-        precondition(remainingTexts.joined().contains("12시간30분더필요"), remainingTexts.joined())
-        let (_, achievedTexts) = try await render(before, required: 6900, name: "before-achieved")
-        precondition(achievedTexts.joined().contains("필수근무달성"), achievedTexts.joined())
-        precondition(!achievedTexts.joined().contains("더필요"))
-        let (_, unknownTexts) = try await render(before, attendanceKnown: false, name: "unknown-attendance")
-        precondition(!unknownTexts.joined().contains("더필요"))
-        precondition(!unknownTexts.joined().contains("필수근무달성"))
+        func calendarText(_ bitmap: NSBitmapImageRep) throws -> String {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLanguages = ["ko-KR", "en-US"]
+            request.regionOfInterest = CGRect(x: 0, y: 0, width: 0.5, height: 1)
+            try VNImageRequestHandler(cgImage: bitmap.cgImage!).perform([request])
+            return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+                .joined().filter { !$0.isWhitespace }
+        }
+        let (remainingImage, _) = try await render(before, required: 7710, name: "before-remaining")
+        let remainingText = try calendarText(remainingImage)
+        precondition(remainingText.contains("12:30필요"), remainingText)
+        let (achievedImage, _) = try await render(before, required: 6900, name: "before-achieved")
+        let achievedText = try calendarText(achievedImage)
+        precondition(achievedText.contains("달성"), achievedText)
+        let (unknownImage, _) = try await render(before, required: 7710, attendanceKnown: false, name: "unknown-attendance")
+        let unknownText = try calendarText(unknownImage)
+        precondition(!unknownText.contains("필요") && !unknownText.contains("달성"), unknownText)
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)
         let (_, endedTexts) = try await render(ended, days: 1, name: "after-clock-out")
@@ -367,8 +375,20 @@ struct MenuTests {
                      "A zero-minute schedule without attendance must not appear as completed work")
         precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-06").minutes == 0,
                      "An actual zero-minute attendance record must remain visible")
+        calendarSnapshot.month.workedMinutes = 8850
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == 750)
+        for key in [date, "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-06"] {
+            precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: key).remainingRequiredMinutes == nil,
+                         "Only known, unattended workdays may show the monthly requirement")
+        }
+        calendarSnapshot.leaveByDate["2026-10-05"] = .paid
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == nil)
+        calendarSnapshot.leaveByDate.removeAll()
+        calendarSnapshot.month.workedMinutes = 9700
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == 0)
         calendarSnapshot.attendanceKnown = false
         precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: date).minutes == nil)
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == nil)
 
         let guideDefaults = UserDefaults(suiteName: "geuntae-bar-guide-\(UUID().uuidString)")!
         guideDefaults.set(false, forKey: "clockInRemindersEnabled")

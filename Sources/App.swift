@@ -1238,6 +1238,12 @@ struct CalendarDayDetail {
               minutes > 0 || record.start?.isEmpty == false else { return nil }
         return minutes
     }
+    var remainingRequiredMinutes: Int? {
+        guard snapshot.attendanceKnown, record?.isScheduledWorkday == true,
+              record?.start?.isEmpty != false, minutes == nil, holiday == nil,
+              key >= snapshot.month.startDate, key <= snapshot.month.endDate else { return nil }
+        return snapshot.displayMonth.remainingMinutes
+    }
 }
 
 struct AttendanceCalendarView: View {
@@ -1320,15 +1326,23 @@ struct AttendanceCalendarView: View {
         let selected = key == selectedKey
         let today = month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt)
         let color = detail.record?.isWorking == true ? Color.orange : WorkProgressBar.confirmedColor
+        let remaining = detail.remainingRequiredMinutes
+        let requirement = remaining.map {
+            $0 > 0
+                ? "현재 \(snapshot.monthTitle) 필수근무까지 \(AttendanceSnapshot.duration($0)) 더 필요"
+                : "현재 \(snapshot.monthTitle) 필수근무 달성"
+        }
         return Button { selectedDate = date } label: {
             VStack(spacing: 4) {
                 Text("\(month.calendar.component(.day, from: date))")
                     .font(.system(size: 13, weight: selected || today ? .bold : .medium, design: .rounded))
                     .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
                 Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
-                     ?? (snapshot.leaveByDate[key].map { $0 == .paid ? "유급" : "무급" }
-                         ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—")))
+                     ?? snapshot.leaveByDate[key].map { $0 == .paid ? "유급" : "무급" }
+                     ?? remaining.map { $0 > 0 ? String(format: "%d:%02d 필요", $0 / 60, $0 % 60) : "달성" }
+                     ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
                     .font(.system(size: 9, weight: .medium)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.75)
                     .foregroundStyle(selected ? Color.white.opacity(0.9) : detail.minutes != nil ? color : .secondary)
             }
             .frame(maxWidth: .infinity).frame(height: 38)
@@ -1342,9 +1356,9 @@ struct AttendanceCalendarView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(key), \(detail.status)")
-        .accessibilityValue(detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
+        .accessibilityValue(requirement ?? detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help("\(key) · \(detail.status)")
+        .help("\(key) · \(requirement ?? detail.status)")
     }
 
     private func selectedDay(_ detail: CalendarDayDetail, date: Date, month: AttendanceCalendarMonth) -> some View {
@@ -1406,20 +1420,13 @@ struct TodaySummary: View {
             }
             Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
                 .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
-            if snapshot.attendanceKnown && snapshot.record?.start?.isEmpty != false {
-                let remaining = snapshot.displayMonth.remainingMinutes
-                Text(remaining > 0
-                     ? "\(snapshot.monthTitle) 필수근무까지 \(AttendanceSnapshot.duration(remaining)) 더 필요"
-                     : "\(snapshot.monthTitle) 필수근무 달성")
-                    .font(.subheadline.weight(.medium))
-            }
             if let minimum = snapshot.minimumTodayMeter {
                 Text("최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
                     .font(.caption).foregroundStyle(.secondary)
                 WorkProgressBar(fill: snapshot.minimumTodayFill, markers: [],
                                 value: minimum.targetMinutes > 0 ? "실제 \(minimum.percent)%" : "필수시간 달성",
                                 label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
-                if minimum.targetMinutes == 0 && snapshot.record?.start?.isEmpty == false {
+                if minimum.targetMinutes == 0 {
                     Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
                 }
             } else {

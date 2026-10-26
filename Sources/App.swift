@@ -963,14 +963,9 @@ struct LaunchLabel: View {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             for hour in 0..<hours {
                 NSColor.white.setFill()
-                arc(hour, 1)
+                arc(hour, 1, inner: finished ? 7 : 4.5)
                 if waiting { continue }
                 let capacity = Double(target > 0 ? target : 480) / Double(hours)
-                let worked = min(capacity, max(0, Double(actual) - Double(hour) * capacity))
-                if finished {
-                    NSColor.systemGray.setFill()
-                    arc(hour, Double(worked) / Double(capacity))
-                }
                 for (lap, color) in colors.enumerated() {
                     let lapTarget = Double(target > 0 ? target : 480)
                     let minutes = min(capacity, max(0, Double(actual) - Double(lap) * lapTarget - Double(hour) * capacity))

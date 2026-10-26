@@ -155,6 +155,7 @@ struct MenuTests {
         let full = Array(repeating: 1.0, count: 8)
         let iconCases: [(String, WorkMeter?, [Double], [Double], [Double])] = [
             ("no-attendance", nil, empty, empty, empty),
+            ("empty", WorkMeter(actualMinutes: 0, targetMinutes: 480), empty, empty, empty),
             ("ten-minutes", WorkMeter(actualMinutes: 10, targetMinutes: 480), [1.0 / 6, 0, 0, 0, 0, 0, 0, 0], empty, empty),
             ("half-target", WorkMeter(actualMinutes: 240, targetMinutes: 480), [1, 1, 1, 1, 0, 0, 0, 0], empty, empty),
             ("short-half-target", WorkMeter(actualMinutes: 90, targetMinutes: 180), [1, 1, 1, 1, 0, 0, 0, 0], empty, empty),
@@ -190,9 +191,10 @@ struct MenuTests {
                                     precondition(matches(pixel, .white),
                                                  "Unfilled donut must be opaque white: \(appearanceName.rawValue) \(name)")
                                 }
-                                if finished {
+                                if finished && meter != nil {
                                     let inner = ringPixel(bitmap, hours: green.count, hour: hour, at: p, radius: 5.5)
-                                    precondition(matches(inner, .systemGray) == (p < bounds[2]))
+                                    precondition(inner.alphaComponent < 0.1,
+                                                 "Finished donut must have a transparent inner gap: \(appearanceName.rawValue) \(name)")
                                 }
                             }
                         }

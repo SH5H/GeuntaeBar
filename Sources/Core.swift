@@ -502,7 +502,7 @@ struct AttendanceSnapshot {
     }
     var minimumTodayFill: Double {
         guard let meter = minimumTodayMeter else { return 0 }
-        return meter.targetMinutes == 0 ? 1 : meter.fillFraction
+        return meter.targetMinutes == 0 ? 1 : Double(max(0, meter.actualMinutes)) / Double(meter.targetMinutes)
     }
     var minimumTodayOvertimeMinutes: Int {
         guard let meter = minimumTodayMeter else { return 0 }

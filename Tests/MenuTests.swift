@@ -72,6 +72,35 @@ struct MenuTests {
                     .write(to: output.appendingPathComponent("segments-\(scheme)-\(name).png"))
             }
         }
+        let overflowCases: [(Double, [Int], [Int], [Int])] = [
+            (1, [40, 350], [], []),
+            (1.5, [220, 350], [40, 180], []),
+            (2, [], [40, 350], []),
+            (2.5, [], [220, 350], [40, 180]),
+            (3, [], [], [40, 350]),
+            (3.5, [], [], [40, 350])
+        ]
+        for scheme in [ColorScheme.light, .dark] {
+            for (fill, teal, yellow, red) in overflowCases {
+                let renderer = ImageRenderer(content: WorkProgressBar(fill: fill, markers: [], value: "", label: "")
+                    .frame(width: 200).environment(\.colorScheme, scheme))
+                renderer.scale = 2
+                let bitmap = NSBitmapImageRep(cgImage: renderer.cgImage!)
+                func color(_ x: Int) -> NSColor { bitmap.colorAt(x: x, y: 14)!.usingColorSpace(.deviceRGB)! }
+                for x in teal {
+                    let c = color(x)
+                    precondition(c.redComponent < 0.4 && c.greenComponent > 0.5 && c.blueComponent > 0.5)
+                }
+                for x in yellow {
+                    let c = color(x)
+                    precondition(c.redComponent > 0.9 && c.greenComponent > 0.6 && c.blueComponent < 0.3)
+                }
+                for x in red {
+                    let c = color(x)
+                    precondition(c.redComponent > 0.9 && c.greenComponent < 0.4 && c.blueComponent < 0.4)
+                }
+            }
+        }
 
         func iconSnapshot(_ meter: WorkMeter?, finished: Bool = false, waiting: Bool = false) -> AttendanceSnapshot? {
             guard let meter else { return nil }

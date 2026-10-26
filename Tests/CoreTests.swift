@@ -166,6 +166,7 @@ struct CoreTests {
                                               remainingWorkDays: 2, updatedAt: morning)
             let extra = max(0, minutes - 360)
             precondition(progress.minimumTodayMeter?.targetMinutes == 360)
+            precondition(progress.minimumTodayFill == Double(minutes) / 360)
             precondition(progress.minimumTodayOvertimeMinutes == extra)
             precondition(progress.menuTitle.contains(" · +") == (extra > 0))
             if minutes == 440 {

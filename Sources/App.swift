@@ -1575,6 +1575,14 @@ struct WorkProgressBar: View {
                 }
                 .frame(width: geometry.size.width * boundedFill, height: 8)
                 .clipShape(Capsule())
+                if fill > 1 {
+                    Capsule().fill(.yellow)
+                        .frame(width: geometry.size.width * min(1, fill - 1), height: 8)
+                }
+                if fill > 2 {
+                    Capsule().fill(.red)
+                        .frame(width: geometry.size.width * min(1, fill - 2), height: 8)
+                }
                 ForEach(markers.indices, id: \.self) { index in
                     if let position = markers[index].position {
                         let matching = markers.indices.filter { markers[$0].position == position }

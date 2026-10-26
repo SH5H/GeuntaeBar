@@ -14,6 +14,7 @@ final class StatusClickRecorder: NSObject {
 @main
 struct LoginTests {
     static func main() async throws {
+        try await flexWebLoginCookieChangeChecks()
         try await flexWebLogoutChecks()
         let epoch = SessionEpoch()
         _ = epoch.begin()
@@ -407,6 +408,63 @@ struct LoginTests {
         await model.signOut()
         model.advanceLiveTime(to: now.addingTimeInterval(300))
         precondition(model.snapshot == nil)
+    }
+
+    static func flexWebLoginCookieChangeChecks() async throws {
+        let suite = "geuntae-flex-web-login-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(false, forKey: "clockInRemindersEnabled")
+        let vault = KeychainSession(service: suite, attendanceService: .flex)
+        defer { try? vault.delete(); defaults.removePersistentDomain(forName: suite) }
+        let webData = WKWebsiteDataStore.nonPersistent()
+        let client = FlexClient()
+        let month = MonthlyReport(workedMinutes: 120, outsideMinutes: 0, requiredMinutes: 480,
+            vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+            startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: nil)
+        var snapshot = AttendanceSnapshot(record: nil, month: month, remainingWorkDays: 1, updatedAt: Date())
+        snapshot.service = .flex
+        var loads = 0
+        let backend = FlexBackend(vault: vault, client: client, webDataStore: webData,
+            snapshotLoader: { _, _ in
+                loads += 1
+                guard client.currentCookies().contains(where: { $0.name == "AID" && $0.value == "signed-in" }) else {
+                    throw FlexError.authentication
+                }
+                return snapshot
+            })
+        let model = WorkBarModel(flex: backend, defaults: defaults, service: .flex)
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = webData
+        let page = WKWebView(frame: .zero, configuration: configuration)
+        let coordinator = LoginWebView.Coordinator(model: model) { _ in }
+        page.navigationDelegate = coordinator
+        coordinator.watch(page)
+        defer { coordinator.stop(); page.stopLoading() }
+        func cookie(_ value: String) -> HTTPCookie {
+            HTTPCookie(properties: [.name: "AID", .value: value, .domain: "flex.team", .path: "/"])!
+        }
+        func waitFor(_ condition: () -> Bool) async throws {
+            let deadline = Date().addingTimeInterval(8)
+            while !condition() && Date() < deadline {
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+        await webData.httpCookieStore.setCookie(cookie("before-login"))
+        page.loadHTMLString("<html><body>flex login</body></html>", baseURL: URL(string: "https://flex.team/home")!)
+        try await waitFor { loads == 1 && !model.isRefreshing }
+        precondition(loads == 1 && !model.loginCompleted && model.snapshot == nil,
+                     "The initial rejected session must not complete login")
+        try await Task.sleep(nanoseconds: 3_200_000_000)
+        precondition(loads == 1, "Unchanged cookies must not repeatedly call the attendance API")
+
+        // SPA login replaces cookies without a new top-level navigation.
+        await webData.httpCookieStore.setCookie(cookie("signed-in"))
+        try await waitFor { model.loginCompleted }
+        precondition(model.loginCompleted && loads == 2 && model.snapshot?.month.workedMinutes == 120,
+                     "New login cookies must resume attendance loading without reopening the window")
+        let saved = try vault.load()
+        precondition(saved.contains { $0.name == "AID" && $0.value == "signed-in" })
+        print("Flex WebKit login cookie-change checks passed")
     }
 
     static func flexWebLogoutChecks() async throws {

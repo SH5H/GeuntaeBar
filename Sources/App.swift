@@ -688,7 +688,7 @@ struct LoginWebView: NSViewRepresentable {
             didSet { onLoadStateChange(loadState) }
         }
         private var timer: Timer?
-        private var didAttemptSignIn = false
+        private var lastAttemptedCookies: Set<SavedCookie> = []
         private let service: AttendanceService
         private let webDataStore: WKWebsiteDataStore
         var isActive: Bool {
@@ -716,7 +716,7 @@ struct LoginWebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             loadState = .loading
-            didAttemptSignIn = false
+            lastAttemptedCookies.removeAll()
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -738,7 +738,7 @@ struct LoginWebView: NSViewRepresentable {
         }
 
         private func checkLogin(_ webView: WKWebView) {
-            guard isActive, !didAttemptSignIn, loadState == .ready,
+            guard isActive, loadState == .ready,
                   !model.loginCompleted, !model.isRefreshing, !model.isSigningOut,
                   model.selectedService == service, let url = webView.url else { return }
             let ready = service == .flex
@@ -749,10 +749,12 @@ struct LoginWebView: NSViewRepresentable {
             webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                 guard let self, self.isActive else { return }
                 Task { @MainActor in
-                    guard self.isActive, !self.didAttemptSignIn,
+                    guard self.isActive, !self.model.loginCompleted,
                           self.model.selectedService == self.service,
                           !self.model.isRefreshing, !self.model.isSigningOut else { return }
-                    self.didAttemptSignIn = true
+                    let current = Set(cookies.map(SavedCookie.init).filter { $0.belongsTo(self.service) && $0.isCurrent })
+                    guard !current.isEmpty, current != self.lastAttemptedCookies else { return }
+                    self.lastAttemptedCookies = current
                     await self.model.acceptCookies(cookies)
                 }
             }

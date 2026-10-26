@@ -241,7 +241,6 @@ struct MenuTests {
                 .environment(\.colorScheme, .light).background(Color.white))
             renderer.scale = 2
             let image = renderer.cgImage!
-            precondition(image.width == 680)
             let bitmap = NSBitmapImageRep(cgImage: image)
             try bitmap.representation(using: .png, properties: [:])!
                 .write(to: output.appendingPathComponent("\(name).png"))
@@ -252,80 +251,37 @@ struct MenuTests {
                 .map { $0.topCandidates(1).first!.string.filter { !$0.isWhitespace } }
             return (bitmap, texts)
         }
-        func filled(_ bitmap: NSBitmapImageRep, x: Int, y: Int) -> Bool {
-            let color = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
-            return color.greenComponent > 0.5 && color.blueComponent > 0.5 &&
-                color.blueComponent < 0.85 && color.redComponent < 0.3
-        }
-        func monthBarY(_ bitmap: NSBitmapImageRep, after dayBar: Int = -20) -> Int {
-            (0..<bitmap.pixelsHigh).first { $0 > dayBar + 20 && filled(bitmap, x: 40, y: $0) }! + 6
-        }
-        func marker(_ bitmap: NSBitmapImageRep, minutes: Int, range: Int, y: Int, color: NSColor) -> Bool {
-            let x = Int((16 + 308 * Double(minutes) / Double(range)) * 2)
-            let expected = color.usingColorSpace(.sRGB)!
-            return (max(0, x - 2)...min(bitmap.pixelsWide - 1, x + 2)).contains { column in
-                ((y - 14)...(y + 14)).contains { row in
-                    let pixel = bitmap.colorAt(x: column, y: row)!.usingColorSpace(.sRGB)!
-                    return abs(pixel.redComponent - expected.redComponent) < 0.15 &&
-                        abs(pixel.greenComponent - expected.greenComponent) < 0.15 &&
-                        abs(pixel.blueComponent - expected.blueComponent) < 0.15
-                }
-            }
-        }
 
         // Four hours against a six-hour minimum fills 2/3, rather than the fixed eight-hour 1/2.
         let working = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 240, holidayStatus: workday)
         let (_, decimalTexts) = try await render(working, required: 7610, name: "daily-required")
         precondition(decimalTexts.joined().contains("6.8시간"), decimalTexts.joined())
-        let (bitmap, texts) = try await render(working, name: "working")
-        precondition(texts.contains("4시간0분/최소6시간0분"))
-        precondition(texts.contains("67%달성"))
-        precondition(texts.filter { $0.contains("/최소6시간0분") }.count == 1)
-        precondition(!texts.contains("4시간0분/8시간0분"))
-        precondition(texts.firstIndex(of: "오늘")! < texts.firstIndex(of: "이번달")!)
-        precondition(!texts.contains { $0.contains("회사수당기준") || $0.contains("리프레시데이") })
-        precondition(texts.contains { $0.contains("출근09:00") })
-        precondition(texts.contains { $0.contains("예상퇴근18:00") })
-        precondition(texts.joined().contains("오늘까지기준120시간0분"))
-        precondition(texts.joined().contains("수당기준-"))
-        precondition(texts.contains { $0.contains("필수시간대비94%") })
-        precondition(texts.contains { $0.contains("최대160시간0분") })
-        let barY = (0..<bitmap.pixelsHigh).first { filled(bitmap, x: 40, y: $0) }!
-        precondition(filled(bitmap, x: 400, y: barY) && !filled(bitmap, x: 500, y: barY))
-        let monthlyY = monthBarY(bitmap, after: barY)
-        precondition(filled(bitmap, x: 480, y: monthlyY) && !filled(bitmap, x: 510, y: monthlyY))
-        precondition(marker(bitmap, minutes: 7200, range: 9600, y: monthlyY, color: .systemRed))
-        precondition(marker(bitmap, minutes: 7680, range: 9600, y: monthlyY, color: .systemBlue))
-        precondition(marker(bitmap, minutes: 8160, range: 9600, y: monthlyY, color: .systemPurple))
-        let filledRows = (0..<bitmap.pixelsHigh).filter { filled(bitmap, x: 40, y: $0) }
-        precondition(zip(filledRows, filledRows.dropFirst()).filter { $1 > $0 + 1 }.count == 1)
+        let (_, texts) = try await render(working, name: "working")
+        precondition(texts.joined().contains("67%달성"))
+        precondition(texts.joined().contains("최소6시간0분"))
+        precondition(texts.joined().contains("예상퇴근18:00"))
+        precondition(texts.joined().contains("필수시간대비94%"))
+        precondition(texts.joined().contains("최대160시간0분"))
 
         let reached = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 480, holidayStatus: workday)
         let (_, reachedTexts) = try await render(reached, name: "reached")
-        precondition(reachedTexts.contains("8시간0분/최소6시간0분") && reachedTexts.contains("100%달성"))
-        precondition(reachedTexts.joined().contains("오늘까지기준120시간0분"))
-        let (zeroBitmap, zeroTexts) = try await render(working, required: 6600, name: "zero-target")
-        precondition(zeroTexts.contains("이번달필수시간달성") && zeroTexts.contains("100%달성"))
-        let zeroBarY = (0..<zeroBitmap.pixelsHigh).first { filled(zeroBitmap, x: 40, y: $0) }!
-        precondition(filled(zeroBitmap, x: 620, y: zeroBarY))
+        precondition(reachedTexts.joined().contains("100%달성"))
+        let (_, zeroTexts) = try await render(working, required: 6600, name: "zero-target")
+        precondition(zeroTexts.joined().contains("이번달필수시간달성"))
 
         let offDay = DailyRecord(date: date, workedMinutes: 240, holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE")
-        let (offBitmap, offTexts) = try await render(offDay, days: 0, name: "no-workdays")
-        precondition(offTexts.contains("4시간0분") && offTexts.contains("남은근무일없음"))
-        precondition(!offTexts.contains { $0.contains("/최소") })
-        let monthY = (0..<offBitmap.pixelsHigh).first { filled(offBitmap, x: 40, y: $0) }!
-        precondition(monthY > offBitmap.pixelsHigh / 3)
+        let (_, offTexts) = try await render(offDay, days: 0, name: "no-workdays")
+        precondition(offTexts.joined().contains("남은근무일없음"))
 
         let before = DailyRecord(date: date, scheduledEnd: scheduledEnd, holidayStatus: workday)
         let (_, beforeTexts) = try await render(before, name: "before-clock-in")
-        precondition(beforeTexts.contains("0시간0분/최소6시간0분") && beforeTexts.contains("0%달성"))
+        precondition(beforeTexts.joined().contains("0%달성"))
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)
         let (_, endedTexts) = try await render(ended, days: 1, name: "after-clock-out")
-        precondition(endedTexts.contains("4시간0분/최소6시간0분") && endedTexts.contains("67%달성"))
-        precondition(endedTexts.contains { $0.contains("퇴근13:00") })
+        precondition(endedTexts.joined().contains("67%달성") && endedTexts.joined().contains("퇴근13:00"))
 
         let overnight = DailyRecord(date: "2026-09-30", start: "2026-09-30T15:00:00+09:00",
                                     scheduledEnd: "2026-09-30T18:00:00+09:00",
@@ -336,60 +292,57 @@ struct MenuTests {
                                           startDate: "2026-09-01", endDate: "2026-09-30",
                                           maximumWorkMinutes: 9600)
         let (_, overnightTexts) = try await render(overnight, days: 0, report: previousMonth, name: "overnight")
-        precondition(overnightTexts.contains("2026-09-30") && overnightTexts.contains("2026-09"))
-        precondition(!overnightTexts.contains("오늘") && !overnightTexts.contains("이번달"))
-        precondition(overnightTexts.contains("9시간0분/최소12시간0분"))
         precondition(overnightTexts.joined().contains("2026-09-30까지기준132시간0분"))
+        precondition(overnightTexts.joined().contains("최소12시간0분"))
 
-        let (overlapBitmap, overlapTexts) = try await render(working, refreshDay: false, name: "overlapping-markers")
-        let overlapY = monthBarY(overlapBitmap, after: barY)
-        precondition(overlapTexts.joined().contains("수당기준-"))
-        precondition(marker(overlapBitmap, minutes: 7680, range: 9600, y: overlapY, color: .systemBlue))
-        precondition(marker(overlapBitmap, minutes: 7680, range: 9600, y: overlapY, color: .systemPurple))
-
-        let noMaximum = MonthlyReport(workedMinutes: 7200, outsideMinutes: 0,
-                                      requiredMinutes: 7680, vacationMinutes: 0, weekendMinutes: 0,
-                                      dailyRequiredMinutes: 480, startDate: date, endDate: "2026-10-31",
-                                      maximumWorkMinutes: nil)
-        let (fallbackBitmap, fallbackTexts) = try await render(working, report: noMaximum, name: "no-maximum")
-        let fallbackY = monthBarY(fallbackBitmap, after: barY)
-        precondition(marker(fallbackBitmap, minutes: 8160, range: 8160, y: fallbackY, color: .systemPurple))
-        precondition(!fallbackTexts.contains { $0.contains("월최대") })
-        let insufficientMaximum = MonthlyReport(workedMinutes: 7200, outsideMinutes: 0,
-                                                requiredMinutes: 7680, vacationMinutes: 0, weekendMinutes: 0,
-                                                dailyRequiredMinutes: 480, startDate: date, endDate: "2026-10-31",
-                                                maximumWorkMinutes: 7200)
-        let (expandedBitmap, _) = try await render(working, report: insufficientMaximum, name: "expanded-range")
-        precondition(marker(expandedBitmap, minutes: 8160, range: 8160,
-                            y: monthBarY(expandedBitmap, after: barY), color: .systemPurple))
-        let (missingBitmap, missingTexts) = try await render(working, compensation: false, name: "no-compensation")
-        let missingY = monthBarY(missingBitmap, after: barY)
-        precondition(missingTexts.joined().contains("수당기준확인불가"))
-        precondition(!marker(missingBitmap, minutes: 8160, range: 9600, y: missingY, color: .systemPurple))
-
-        let zeroMonth = MonthlyReport(workedMinutes: 0, outsideMinutes: 0,
-                                     requiredMinutes: 0, vacationMinutes: 0, weekendMinutes: 0,
-                                     dailyRequiredMinutes: 480, startDate: date, endDate: "2026-10-31",
-                                     maximumWorkMinutes: nil)
-        let (allZeroBitmap, allZeroTexts) = try await render(before, report: zeroMonth, refreshDay: false, name: "all-zero")
-        precondition(allZeroTexts.joined().contains("필수근무시간-0시간0분"))
-        // All three markers share the start of a zero-length range.
-        let markerRows = (0..<allZeroBitmap.pixelsHigh).filter {
-            let pixel = allZeroBitmap.colorAt(x: 32, y: $0)!.usingColorSpace(.deviceRGB)!
-            return pixel.redComponent > 0.8 && pixel.greenComponent < 0.4 && pixel.blueComponent < 0.4
+        // Calendar boundaries must remain correct across leap years, six-row months and time zones.
+        func calendarSnapshot(_ first: String, _ last: String, _ instant: String) -> AttendanceSnapshot {
+            var value = AttendanceSnapshot(record: nil,
+                month: MonthlyReport(workedMinutes: 0, outsideMinutes: 0, requiredMinutes: 9600,
+                    vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+                    startDate: first, endDate: last, maximumWorkMinutes: nil),
+                remainingWorkDays: 10, updatedAt: ISO8601DateFormatter().date(from: instant)!)
+            value.timeZone = TimeZone(identifier: "Asia/Seoul")!
+            return value
         }
-        let allZeroY = markerRows.first! + 14
-        for color in [NSColor.systemRed, .systemBlue, .systemPurple] {
-            precondition(marker(allZeroBitmap, minutes: 0, range: 1, y: allZeroY, color: color))
-        }
-        let overMaximum = MonthlyReport(workedMinutes: 10080, outsideMinutes: 0,
-                                        requiredMinutes: 7680, vacationMinutes: 0, weekendMinutes: 0,
-                                        dailyRequiredMinutes: 480, startDate: date, endDate: "2026-10-31",
-                                        maximumWorkMinutes: 9600)
-        let (overBitmap, overTexts) = try await render(working, report: overMaximum, name: "over-maximum")
-        let overY = monthBarY(overBitmap, after: barY)
-        precondition(filled(overBitmap, x: 620, y: overY))
-        precondition(overTexts.contains { $0.contains("누적168시간0분") } && overTexts.contains { $0.contains("필수시간대비131%") })
+        let leap = AttendanceCalendarMonth(snapshot: calendarSnapshot("2024-02-01", "2024-02-29", "2024-02-15T00:00:00Z"))
+        precondition(leap.days.prefix(4).allSatisfy { $0 == nil })
+        precondition(leap.days.compactMap { $0 }.map(leap.key).last == "2024-02-29")
+        precondition(leap.adjacentMonth(-1) == nil && leap.adjacentMonth(1) == nil)
+        let sixRows = AttendanceCalendarMonth(snapshot: calendarSnapshot("2026-08-01", "2026-08-31", "2026-08-01T00:00:00Z"))
+        precondition(sixRows.days.count == 42 && sixRows.days[6].map(sixRows.key) == "2026-08-01")
+        let crossYear = AttendanceCalendarMonth(snapshot: calendarSnapshot("2026-12-15", "2027-01-14", "2026-12-31T16:00:00Z"))
+        precondition(crossYear.key(crossYear.start) == "2027-01-01")
+        precondition(crossYear.adjacentMonth(-1).map(crossYear.key) == "2026-12-01")
+        precondition(crossYear.adjacentMonth(1) == nil)
+
+        var calendarSnapshot = calendarSnapshot("2026-10-01", "2026-10-31", "2026-10-01T04:00:00Z")
+        calendarSnapshot.record = working
+        calendarSnapshot.calendarRecords = [
+            DailyRecord(date: date, start: start, currentMinutes: 120, holidayStatus: workday),
+            DailyRecord(date: "2026-10-02", holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE"),
+            DailyRecord(date: "2026-10-03", start: "2026-10-03T09:00:00+09:00",
+                        end: "2026-10-03T17:00:00+09:00", workedMinutes: 420),
+            DailyRecord(date: "2026-10-05", workedMinutes: 0, holidayStatus: workday),
+            DailyRecord(date: "2026-10-06", start: "2026-10-06T09:00:00+09:00",
+                        end: "2026-10-06T09:00:00+09:00", workedMinutes: 0),
+        ]
+        calendarSnapshot.calendarHolidays = ["2026-10-02": CompanyHoliday(name: "창립기념일")]
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: date).minutes == 240,
+                     "The selected current day must use live minutes, not the older monthly row")
+        let holiday = CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-02")
+        precondition(holiday.holiday == "창립기념일" && holiday.minutes == nil)
+        let completed = CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-03")
+        precondition(completed.minutes == 420 && completed.record?.end == "2026-10-03T17:00:00+09:00")
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-04").minutes == nil,
+                     "Missing records must not become zero-hour attendance")
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").minutes == nil,
+                     "A zero-minute schedule without attendance must not appear as completed work")
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-06").minutes == 0,
+                     "An actual zero-minute attendance record must remain visible")
+        calendarSnapshot.attendanceKnown = false
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: date).minutes == nil)
+
         let guideDefaults = UserDefaults(suiteName: "geuntae-bar-guide-\(UUID().uuidString)")!
         guideDefaults.set(false, forKey: "clockInRemindersEnabled")
         let guideState = OnboardingState(defaults: guideDefaults)

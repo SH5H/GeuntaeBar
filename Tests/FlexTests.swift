@@ -265,6 +265,11 @@ struct FlexTests {
         precondition(legacy.affectsRequired && legacy.affectsMaximum && legacy.affectsCompensation)
         let deduction = wednesdays.customHolidayDeduction!
         precondition(deduction.dates == ["2026-10-07", "2026-10-21"] && deduction.minutes == 960)
+        let holidayRecord = wednesdays.calendarRecords.first { $0.date == "2026-10-07" }!
+        precondition(holidayRecord.totalMinutes == 587 && holidayRecord.isScheduledDayOff,
+                     "A custom holiday must retain completed work without becoming a scheduled workday")
+        precondition(wednesdays.calendarRecords.first { $0.date == "2026-10-05" }?.isScheduledDayOff == true)
+        precondition(wednesdays.calendarHolidays["2026-10-05"]?.name == "개천절 대체휴일")
         precondition(deduction.flexRequiredMinutes == 9600 && deduction.flexMaximumMinutes == 13812)
         let plain = try snapshot(f)
         precondition(plain.customHolidayDeduction == nil)

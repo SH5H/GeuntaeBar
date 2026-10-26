@@ -455,12 +455,16 @@ struct CoreTests {
             "/work/work_time/?date=2026-10-03": rows,
             "/work/work_time/work_report/?date=2026-10-02": report,
             "/work/work_time/work_report/?date=2026-10-03": report,
-            "/work/sch_event/company_holidays/": "{}"
+            "/work/sch_event/company_holidays/": #"{"2026-10-05":{"name":"창립기념일"}}"#
         ]
         let before = try await client.snapshot(for: ISO8601DateFormatter().date(from: "2026-10-02T23:59:00+09:00")!)
         AttendanceStubProtocol.requests = []
         let after = try await client.snapshot(for: ISO8601DateFormatter().date(from: "2026-10-03T00:01:00+09:00")!)
         precondition(after.record?.date == "2026-10-02", "An unfinished shift must keep its clock-in date")
+        precondition(after.calendarRecords.map(\.date) == ["2026-10-03", "2026-10-02", "2026-10-04", "2026-10-01"])
+        precondition(after.calendarRecords.first { $0.date == "2026-10-02" }?.start == "2026-10-02T15:00:00+09:00")
+        precondition(after.calendarRecords.first { $0.date == "2026-10-02" }?.isScheduledWorkday == true)
+        precondition(after.calendarHolidays["2026-10-05"]?.name == "창립기념일")
         precondition(before.dailyRestMinutes == 30 && after.dailyRestMinutes == 30)
         precondition(after.attendanceDescription == "출근 15:00 · 예상 퇴근 23:30")
         precondition(before.dayTitle == "오늘" && after.dayTitle == "2026-10-02")

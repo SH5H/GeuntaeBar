@@ -372,6 +372,8 @@ enum FlexAttendance {
         snapshot.averageClockInMinute = AttendanceSnapshot.averageClockInMinute(in: rows, before: workDate, timeZone: zone)
         snapshot.compensationEstimate = CompensationEstimate(month: month, days: rows, holidays: holidays,
             extraMinutes: requiredDeduction - compensationDeduction)
+        snapshot.calendarRecords = rows
+        snapshot.calendarHolidays = holidays
         snapshot.expectedClockOut = try status.onTimeInfo?.clockOutOnTimeInfo?.clockOnTime.map(FlexDates.timestamp)
         if customHoliday != nil {
             snapshot.customHolidayDeduction = CustomHolidayDeduction(dates: customHolidayDates, minutes: customHolidayMinutes,

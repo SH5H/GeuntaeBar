@@ -68,7 +68,7 @@ struct FlexViewTests {
         model.beginSignIn()
         await model.acceptCookies([cookie])
         precondition(model.loginCompleted)
-        let menuText = try render(WorkMenu(model: model), "menu", width: 340, height: 680)
+        let menuText = try render(WorkMenu(model: model), "menu", width: 728, height: 680)
         precondition(menuText.contains("근무중") && !menuText.contains("서버기록기준") && !menuText.contains("추정"), menuText)
         precondition(menuText.contains("누적75시간0분"), menuText)
         precondition(menuText.contains("14일") && menuText.contains("6.6시간"), menuText)
@@ -76,7 +76,7 @@ struct FlexViewTests {
         precondition(menuText.contains("휴일10/14,10/28") && menuText.contains("16시간0분"), menuText)
         precondition(!menuText.contains("설정기준"), menuText)
         model.advanceLiveTime(to: now.addingTimeInterval(60))
-        let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 340, height: 680)
+        let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 728, height: 680)
         precondition(nextMinute.contains("누적75시간1분") && nextMinute.contains("92시간9분"), nextMinute)
         model.customHoliday = CustomHolidayRule(weekday: 4, ordinals: [2, 4])
         let updater = AppUpdater(appURL: output.appendingPathComponent("missing.app"), defaults: defaults,
@@ -89,7 +89,7 @@ struct FlexViewTests {
         fetchError = FlexError.invalidData("퇴근 기록에 대응하는 근무 내역이 없습니다.")
         _ = await model.refresh()
         precondition(model.hasSavedSession && !model.loginCompleted)
-        let failedMenu = try render(WorkMenu(model: model), "menu-fetch-failed", width: 340, height: 760)
+        let failedMenu = try render(WorkMenu(model: model), "menu-fetch-failed", width: 728, height: 760)
         precondition(failedMenu.contains("퇴근기록에대응하는근무내역이없습니다"), failedMenu)
         let failedOptions = try render(WorkOptionsWindow(model: model, onboarding: OnboardingState(defaults: defaults), updater: updater),
                                        "options-fetch-failed", width: 440, height: 640)

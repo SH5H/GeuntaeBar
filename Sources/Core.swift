@@ -358,6 +358,8 @@ struct AttendanceSnapshot {
     let month: MonthlyReport
     let remainingWorkDays: Int
     let updatedAt: Date
+    var calendarRecords: [DailyRecord] = []
+    var calendarHolidays: [String: CompanyHoliday] = [:]
     var compensationEstimate: CompensationEstimate? = nil
     var averageClockInMinute: Int? = nil
     var dailyRestMinutes: Int? = nil
@@ -705,12 +707,15 @@ final class AttendanceClient {
         snapshot.accountIdentifier = userID
         snapshot.dailyRestMinutes = userProfile["wk_except_legal"] as? Int
         snapshot.averageClockInMinute = AttendanceSnapshot.averageClockInMinute(in: allRows, before: workDate)
+        var holidays: [String: CompanyHoliday] = [:]
         if let holidayData = try? await get("/work/sch_event/company_holidays/"),
-           let holidays = try? JSONDecoder().decode([String: CompanyHoliday].self,
-                                                    from: holidayData) {
+           let decoded = try? JSONDecoder().decode([String: CompanyHoliday].self, from: holidayData) {
+            holidays = decoded
             snapshot.compensationEstimate = CompensationEstimate(month: report, days: rows,
-                                                                  holidays: holidays)
+                                                                  holidays: decoded)
         }
+        snapshot.calendarRecords = allRows
+        snapshot.calendarHolidays = holidays
         return snapshot
     }
 

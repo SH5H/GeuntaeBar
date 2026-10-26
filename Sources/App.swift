@@ -1085,73 +1085,303 @@ struct WorkMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(model.selectedService == .flex ? "근태 · flex" : "근태").font(.headline)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(WorkProgressBar.confirmedColor)
+                Text("근무 캘린더").font(.headline)
+                Text(model.selectedService == .flex ? "flex" : "원티드스페이스")
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if let snapshot = model.snapshot {
                     Text("\(snapshot.updatedAt, style: .time) 갱신")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Button {
                     openWindow(id: "options")
                     NSApplication.shared.activate(ignoringOtherApps: true)
                 } label: {
                     Image(systemName: "gearshape")
+                        .frame(width: 28, height: 28)
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
                 .help("옵션")
                 .accessibilityLabel("옵션 열기")
             }
             if let snapshot = model.snapshot {
-                Divider()
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack {
-                        Text(snapshot.dayTitle).font(.subheadline.weight(.semibold))
-                        Spacer()
-                        if snapshot.minimumTodayMeter != nil {
-                            Text("\(Int((snapshot.minimumTodayFill * 100).rounded()))% 달성")
-                                .font(.subheadline.weight(.semibold))
-                        }
+                HStack(alignment: .top, spacing: 20) {
+                    AttendanceCalendarView(snapshot: snapshot)
+                        .id("\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)-\(snapshot.month.startDate)-\(snapshot.record?.date ?? "")")
+                        .frame(width: 350)
+                    VStack(alignment: .leading, spacing: 20) {
+                        TodaySummary(snapshot: snapshot)
+                        Divider()
+                        MonthSummary(snapshot: snapshot)
                     }
-                    if let minimum = snapshot.minimumTodayMeter {
-                        Text("\(AttendanceSnapshot.duration(snapshot.todayMinutes)) / 최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        WorkProgressBar(fill: snapshot.minimumTodayFill,
-                                        markers: [],
-                                        value: "실제 \(Int((snapshot.minimumTodayFill * 100).rounded()))%",
-                                        label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
-                        if minimum.targetMinutes == 0 {
-                            Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
-                        }
-                    } else {
-                        Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(snapshot.attendanceKnown ? "남은 근무일 없음" : "진행률 확인 불가").font(.caption)
-                    }
-                    Text(snapshot.attendanceDescription).font(.caption)
-                    if let note = snapshot.attendanceNote {
-                        Text(note).font(.caption).foregroundStyle(.secondary)
-                    }
+                    .padding(16)
+                    .frame(width: 318)
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
                 }
-                Divider()
-                MonthSummary(snapshot: snapshot)
             } else {
-                Text(model.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Label(model.message, systemImage: "calendar.badge.exclamationmark")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .padding(.vertical, 24)
             }
             if model.snapshot != nil && model.message != "방금 업데이트됨" {
                 Text(model.message)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .frame(width: 340)
+        .padding(20)
+        .frame(width: model.snapshot == nil ? 400 : 728)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+struct AttendanceCalendarMonth {
+    let calendar: Calendar
+    let formatter: DateFormatter
+    let start: Date
+    let days: [Date?]
+    let firstAllowedMonth: Date
+    let lastAllowedMonth: Date
+    let referenceDate: Date
+
+    init(snapshot: AttendanceSnapshot, displaying date: Date? = nil) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = snapshot.timeZone
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = snapshot.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let reference = snapshot.record.flatMap { formatter.date(from: $0.date) } ?? snapshot.updatedAt
+        let first = formatter.date(from: snapshot.month.startDate) ?? reference
+        let last = formatter.date(from: snapshot.month.endDate) ?? reference
+        // Include an ongoing shift even when it began before the reporting period.
+        firstAllowedMonth = calendar.dateInterval(of: .month, for: min(first, reference))!.start
+        lastAllowedMonth = calendar.dateInterval(of: .month, for: max(last, max(reference, snapshot.updatedAt)))!.start
+        let requested = calendar.dateInterval(of: .month, for: date ?? reference)!.start
+        let start = min(max(requested, firstAllowedMonth), lastAllowedMonth)
+        self.start = start
+        let leading = calendar.component(.weekday, from: start) - 1
+        let count = calendar.range(of: .day, in: .month, for: start)!.count
+        let dates = (0..<count).map { calendar.date(byAdding: .day, value: $0, to: start) }
+        days = Array(repeating: nil, count: leading) + dates
+            + Array(repeating: nil, count: (7 - (leading + count) % 7) % 7)
+        self.calendar = calendar
+        self.formatter = formatter
+        referenceDate = reference
+    }
+
+    var title: String { "\(calendar.component(.year, from: start))년 \(calendar.component(.month, from: start))월" }
+    func key(_ date: Date) -> String { formatter.string(from: date) }
+    func adjacentMonth(_ offset: Int) -> Date? {
+        guard let date = calendar.date(byAdding: .month, value: offset, to: start),
+              date >= firstAllowedMonth, date <= lastAllowedMonth else { return nil }
+        return date
+    }
+}
+
+struct CalendarDayDetail {
+    let snapshot: AttendanceSnapshot
+    let key: String
+
+    let record: DailyRecord?
+
+    init(snapshot: AttendanceSnapshot, key: String) {
+        self.snapshot = snapshot
+        self.key = key
+        record = snapshot.record?.date == key ? snapshot.record : snapshot.calendarRecords.first { $0.date == key }
+    }
+    var holiday: String? {
+        if let holiday = snapshot.calendarHolidays[key] { return holiday.name }
+        if snapshot.customHolidayDeduction?.dates.contains(key) == true { return "사용자 지정 휴일" }
+        return nil
+    }
+    var status: String {
+        if snapshot.record?.date == key && !snapshot.attendanceKnown { return "근태 확인 불가" }
+        if let record, record.isWorking { return "근무 중" }
+        if let record, record.end?.isEmpty == false { return "근무 완료" }
+        if let holiday { return holiday }
+        if let record {
+            if record.isScheduledWorkday { return "근무일" }
+            if record.isScheduledDayOff { return "휴무" }
+        }
+        return "기록 없음"
+    }
+    var minutes: Int? {
+        if snapshot.record?.date == key && !snapshot.attendanceKnown { return nil }
+        guard let record, let minutes = record.totalMinutes,
+              minutes > 0 || record.start?.isEmpty == false else { return nil }
+        return minutes
+    }
+}
+
+struct AttendanceCalendarView: View {
+    let snapshot: AttendanceSnapshot
+    @State private var displayedMonth: Date?
+    @State private var selectedDate: Date?
+
+    var body: some View {
+        let month = AttendanceCalendarMonth(snapshot: snapshot, displaying: displayedMonth)
+        let selection = selectedDate ?? month.referenceDate
+        let selectedKey = month.key(selection)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                Text(month.title).font(.system(size: 24, weight: .bold, design: .rounded))
+                Spacer()
+                Button("오늘") {
+                    displayedMonth = snapshot.updatedAt
+                    selectedDate = snapshot.updatedAt
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(.quaternary, in: Capsule())
+                ForEach([-1, 1], id: \.self) { offset in
+                    Button {
+                        if let date = month.adjacentMonth(offset) {
+                            displayedMonth = date
+                            selectedDate = date
+                        }
+                    } label: {
+                        Image(systemName: offset < 0 ? "chevron.left" : "chevron.right")
+                            .font(.caption.weight(.semibold)).frame(width: 20, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(month.adjacentMonth(offset) == nil)
+                    .accessibilityLabel(offset < 0 ? "이전 달" : "다음 달")
+                }
+            }
+            Text("조회 기간 \(snapshot.month.startDate) – \(snapshot.month.endDate)")
+                .font(.caption2).foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    ForEach(Array(["일", "월", "화", "수", "목", "금", "토"].enumerated()), id: \.offset) { index, day in
+                        Text(day).font(.caption.weight(.medium))
+                            .foregroundStyle(index == 0 ? Color.red : .secondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                Grid(horizontalSpacing: 4, verticalSpacing: 4) {
+                    ForEach(0..<(month.days.count / 7), id: \.self) { week in
+                        GridRow {
+                            ForEach(0..<7, id: \.self) { weekday in
+                                if let date = month.days[week * 7 + weekday] {
+                                    dayCell(date, month: month, selectedKey: selectedKey)
+                                } else {
+                                    Color.clear.frame(height: 48)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HStack(spacing: 14) {
+                Label("근무", systemImage: "circle.fill").foregroundStyle(WorkProgressBar.confirmedColor)
+                Label("진행 중", systemImage: "circle.fill").foregroundStyle(.orange)
+                Text("— 기록 없음").foregroundStyle(.secondary)
+            }
+            .font(.system(size: 10))
+            Divider()
+            selectedDay(CalendarDayDetail(snapshot: snapshot, key: selectedKey), date: selection, month: month)
+        }
+    }
+
+    private func dayCell(_ date: Date, month: AttendanceCalendarMonth, selectedKey: String) -> some View {
+        let key = month.key(date)
+        let detail = CalendarDayDetail(snapshot: snapshot, key: key)
+        let selected = key == selectedKey
+        let today = month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt)
+        let color = detail.record?.isWorking == true ? Color.orange : WorkProgressBar.confirmedColor
+        return Button { selectedDate = date } label: {
+            VStack(spacing: 4) {
+                Text("\(month.calendar.component(.day, from: date))")
+                    .font(.system(size: 13, weight: selected || today ? .bold : .medium, design: .rounded))
+                    .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
+                Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
+                     ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
+                    .font(.system(size: 9, weight: .medium)).monospacedDigit()
+                    .foregroundStyle(selected ? Color.white.opacity(0.9) : detail.minutes != nil ? color : .secondary)
+            }
+            .frame(maxWidth: .infinity).frame(height: 48)
+            .background(selected ? WorkProgressBar.confirmedColor : detail.minutes != nil ? color.opacity(0.09) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(today ? WorkProgressBar.confirmedColor : .clear, lineWidth: 1.5)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(key), \(detail.status)")
+        .accessibilityValue(detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help("\(key) · \(detail.status)")
+    }
+
+    private func selectedDay(_ detail: CalendarDayDetail, date: Date, month: AttendanceCalendarMonth) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("\(month.calendar.component(.month, from: date))월 \(month.calendar.component(.day, from: date))일")
+                    .font(.headline)
+                if month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt) {
+                    Text("오늘").font(.caption).foregroundStyle(WorkProgressBar.confirmedColor)
+                }
+                Spacer()
+                Text(detail.status).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            }
+            Text(detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
+                .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
+            if let record = detail.record {
+                Text(detail.key == snapshot.record?.date ? snapshot.attendanceDescription :
+                     "출근 \(AttendanceSnapshot.clock(record.start)) · 퇴근 \(AttendanceSnapshot.clock(record.end))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let holiday = detail.holiday, holiday != detail.status {
+                Text(holiday).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct TodaySummary: View {
+    let snapshot: AttendanceSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(snapshot.dayTitle).font(.subheadline.weight(.semibold))
+                Spacer()
+                if snapshot.minimumTodayMeter != nil {
+                    Text("\(Int((snapshot.minimumTodayFill * 100).rounded()))% 달성")
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
+                .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
+            if let minimum = snapshot.minimumTodayMeter {
+                Text("최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
+                    .font(.caption).foregroundStyle(.secondary)
+                WorkProgressBar(fill: snapshot.minimumTodayFill, markers: [],
+                                value: "실제 \(Int((snapshot.minimumTodayFill * 100).rounded()))%",
+                                label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
+                if minimum.targetMinutes == 0 {
+                    Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
+                }
+            } else {
+                Text(snapshot.attendanceKnown ? "남은 근무일 없음" : "진행률 확인 불가").font(.caption)
+            }
+            Text(snapshot.attendanceDescription).font(.caption)
+            if let note = snapshot.attendanceNote {
+                Text(note).font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

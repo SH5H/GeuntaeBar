@@ -1362,7 +1362,7 @@ struct AttendanceCalendarView: View {
     }
 
     private func selectedDay(_ detail: CalendarDayDetail, date: Date, month: AttendanceCalendarMonth) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("\(month.calendar.component(.month, from: date))월 \(month.calendar.component(.day, from: date))일")
                     .font(.headline)
@@ -1384,19 +1384,25 @@ struct AttendanceCalendarView: View {
             Text(detail.holiday ?? " ")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(detail.holiday ?? "")
-            Picker("휴가", selection: Binding(
-                get: { snapshot.leaveByDate[detail.key] },
-                set: { setLeave($0, detail.key) })) {
-                Text("휴가 없음").tag(LeaveType?.none)
-                ForEach(LeaveType.allCases, id: \.self) { type in
-                    Text(type.title).tag(Optional(type))
+            HStack {
+                Picker("휴가", selection: Binding(
+                    get: { snapshot.leaveByDate[detail.key] },
+                    set: { setLeave($0, detail.key) })) {
+                    ForEach(LeaveType.allCases, id: \.self) { type in
+                        Text(type == .paid ? "소정근로시간 인정 제외" : "초과근로 산정 반영 제외")
+                            .tag(Optional(type))
+                    }
                 }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                .controlSize(.small)
+                .accessibilityLabel("\(detail.key) 휴가")
+                Button("휴가 없음") { setLeave(nil, detail.key) }
+                    .disabled(snapshot.leaveByDate[detail.key] == nil)
             }
-            .pickerStyle(.segmented)
             .disabled(!canEditLeave || detail.key < snapshot.month.startDate ||
                       detail.key > snapshot.month.endDate ||
                       !snapshot.calendarRecords.contains { $0.date == detail.key })
-            .accessibilityLabel("\(detail.key) 휴가")
             Text("앱 내 계산에만 반영 · 회사에 신청하지 않음")
                 .font(.caption2).foregroundStyle(.secondary)
         }

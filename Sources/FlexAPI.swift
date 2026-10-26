@@ -33,7 +33,6 @@ final class FlexClient {
     private var revision = 0
     private var requestTask: Task<Data, Error>?
     private var nextRequestAt = Date.distantPast
-    private var lastBuild: ((CustomHolidayRule?) throws -> AttendanceSnapshot)?
 
     init(configuration: URLSessionConfiguration = .ephemeral, requestInterval: TimeInterval = 1) {
         configuration.httpShouldSetCookies = false
@@ -48,7 +47,6 @@ final class FlexClient {
         revision += 1
         requestTask?.cancel()
         cookies = saved.filter { $0.belongsTo(.flex) && $0.isCurrent }.compactMap(\.cookie)
-        lastBuild = nil
     }
 
     func currentCookies() -> [HTTPCookie] { cookies.filter { SavedCookie($0).isCurrent } }
@@ -179,7 +177,7 @@ final class FlexClient {
         try JSONDecoder().decode(T.self, from: await get(path, query: query))
     }
 
-    func snapshot(includePreviousPeriod: Bool = false, customHoliday: CustomHolidayRule? = nil) async throws -> AttendanceSnapshot {
+    func snapshot(includePreviousPeriod: Bool = false) async throws -> AttendanceSnapshot {
         let attempt = revision
         func load<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
             guard revision == attempt else { throw CancellationError() }
@@ -238,21 +236,11 @@ final class FlexClient {
         let rules: FlexRules = try await load("/api/v2/work-rule/customers/\(user.customerIdHash)/work-rules/\(rule.workRule.customerWorkRuleId)")
         guard let companyRule = rules.workRules.first(where: { $0.customerWorkRuleId == rule.workRule.customerWorkRuleId }),
               revision == attempt else { throw FlexError.invalidData("적용된 회사 근무 규칙을 찾지 못했습니다.") }
-        let account = user.customerIdHash + ":" + user.userIdHash
-        let build = { (holiday: CustomHolidayRule?) throws -> AttendanceSnapshot in
-            var result = try FlexAttendance.snapshot(period: period.period, summary: summary, today: today,
-                status: status, schedules: schedules, attributes: attributes, rule: companyRule,
-                customHoliday: holiday, serverClockOffset: serverClockOffset)
-            result.accountIdentifier = account
-            return result
-        }
-        let result = try build(customHoliday)
-        lastBuild = build
+        var result = try FlexAttendance.snapshot(period: period.period, summary: summary, today: today,
+            status: status, schedules: schedules, attributes: attributes, rule: companyRule,
+            serverClockOffset: serverClockOffset)
+        result.accountIdentifier = user.customerIdHash + ":" + user.userIdHash
         return result
     }
 
-    /// Recomputes the last fetched snapshot for another custom holiday without a request; nil before any fetch.
-    func rebuild(customHoliday: CustomHolidayRule?) throws -> AttendanceSnapshot? {
-        try lastBuild?(customHoliday)
-    }
 }

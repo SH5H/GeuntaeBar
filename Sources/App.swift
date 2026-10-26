@@ -73,15 +73,37 @@ final class Preferences {
         get { defaults.integer(forKey: "clockInReminderDelayMinutes") }
         set { defaults.set(newValue, forKey: "clockInReminderDelayMinutes") }
     }
-    var customHoliday: CustomHolidayRule? {
-        get { defaults.data(forKey: "customHolidayRule").flatMap { try? JSONDecoder().decode(CustomHolidayRule.self, from: $0) } }
-        set {
-            if let data = newValue.flatMap({ try? JSONEncoder().encode($0) }) {
-                defaults.set(data, forKey: "customHolidayRule")
-            } else {
-                defaults.removeObject(forKey: "customHolidayRule")
+    func leaveByDate(for snapshot: AttendanceSnapshot) -> [String: LeaveType] {
+        let key = "calendarLeave-\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)"
+        var leaves = defaults.data(forKey: key)
+            .flatMap { try? JSONDecoder().decode([String: LeaveType].self, from: $0) } ?? [:]
+        if snapshot.service == .flex,
+           let data = defaults.data(forKey: "customHolidayRule"),
+           let legacy = try? JSONDecoder().decode(LegacyHoliday.self, from: data) {
+            let month = AttendanceCalendarMonth(snapshot: snapshot)
+            for record in snapshot.calendarRecords where record.isScheduledWorkday &&
+                record.date >= snapshot.month.startDate && record.date <= snapshot.month.endDate {
+                guard let date = month.formatter.date(from: record.date),
+                      month.calendar.component(.weekday, from: date) == legacy.weekday,
+                      legacy.ordinals.contains((month.calendar.component(.day, from: date) - 1) / 7 + 1),
+                      leaves[record.date] == nil else { continue }
+                leaves[record.date] = legacy.affectsCompensation == false ? .unpaid : .paid
             }
+            setLeaveByDate(leaves, for: snapshot)
+            defaults.removeObject(forKey: "customHolidayRule")
         }
+        return leaves
+    }
+
+    func setLeaveByDate(_ leaves: [String: LeaveType], for snapshot: AttendanceSnapshot) {
+        defaults.set(try? JSONEncoder().encode(leaves),
+                     forKey: "calendarLeave-\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)")
+    }
+
+    private struct LegacyHoliday: Decodable {
+        let weekday: Int
+        let ordinals: Set<Int>
+        let affectsCompensation: Bool?
     }
     var attendanceService: AttendanceService? {
         get { AttendanceService(rawValue: defaults.string(forKey: "attendanceService") ?? "") }
@@ -121,9 +143,7 @@ protocol AttendanceBackend: AnyObject {
     func restoreSession() throws -> Bool
     /// Adopts cookies from the web login; returns false when none belong to this backend.
     func adoptCookies(_ cookies: [HTTPCookie]) -> Bool
-    func loadSnapshot(includePreviousPeriod: Bool, customHoliday: CustomHolidayRule?) async throws -> AttendanceSnapshot
-    /// The last loaded snapshot recomputed for another custom holiday, or nil when that needs a fresh load.
-    func rebuildSnapshot(customHoliday: CustomHolidayRule?) -> AttendanceSnapshot?
+    func loadSnapshot(includePreviousPeriod: Bool) async throws -> AttendanceSnapshot
     /// Persists the session after a successful load; returns false when `isCurrent` turned false midway.
     func saveSession(isCurrent: () -> Bool) async throws -> Bool
     /// Maps a failed load to what the user sees, forgetting credentials the server rejected.
@@ -164,10 +184,9 @@ final class WantedSpaceBackend: AttendanceBackend {
         client.restore(cookies.map(SavedCookie.init))
         return true
     }
-    func loadSnapshot(includePreviousPeriod: Bool, customHoliday: CustomHolidayRule?) async throws -> AttendanceSnapshot {
+    func loadSnapshot(includePreviousPeriod: Bool) async throws -> AttendanceSnapshot {
         try await snapshotLoader(includePreviousPeriod)
     }
-    func rebuildSnapshot(customHoliday: CustomHolidayRule?) -> AttendanceSnapshot? { nil }
     func saveSession(isCurrent: () -> Bool) async throws -> Bool {
         try sessionSaver(currentCookies)
         return true
@@ -195,7 +214,7 @@ final class FlexBackend: AttendanceBackend {
     private let client: FlexClient
     private(set) var webDataStore: WKWebsiteDataStore
     private var webCookieStore: WKHTTPCookieStore { webDataStore.httpCookieStore }
-    private let snapshotLoader: (Bool, CustomHolidayRule?) async throws -> AttendanceSnapshot
+    private let snapshotLoader: (Bool) async throws -> AttendanceSnapshot
     private let sessionSaver: ([HTTPCookie]) throws -> Void
 
     init(vault: KeychainSession = KeychainSession(service: "ai.wantedspace.WorkBar.flex.web",
@@ -204,13 +223,13 @@ final class FlexBackend: AttendanceBackend {
              ]),
          client: FlexClient? = nil,
          webDataStore: WKWebsiteDataStore? = nil,
-         snapshotLoader: ((Bool, CustomHolidayRule?) async throws -> AttendanceSnapshot)? = nil,
+         snapshotLoader: ((Bool) async throws -> AttendanceSnapshot)? = nil,
          sessionSaver: (([HTTPCookie]) throws -> Void)? = nil) {
         self.vault = vault
         let client = client ?? FlexClient()
         self.client = client
         self.webDataStore = webDataStore ?? .nonPersistent()
-        self.snapshotLoader = snapshotLoader ?? { try await client.snapshot(includePreviousPeriod: $0, customHoliday: $1) }
+        self.snapshotLoader = snapshotLoader ?? { try await client.snapshot(includePreviousPeriod: $0) }
         self.sessionSaver = sessionSaver ?? { _ = try vault.save($0) }
     }
 
@@ -225,11 +244,8 @@ final class FlexBackend: AttendanceBackend {
         client.restore(cookies.map(SavedCookie.init))
         return true
     }
-    func loadSnapshot(includePreviousPeriod: Bool, customHoliday: CustomHolidayRule?) async throws -> AttendanceSnapshot {
-        try await snapshotLoader(includePreviousPeriod, customHoliday)
-    }
-    func rebuildSnapshot(customHoliday: CustomHolidayRule?) -> AttendanceSnapshot? {
-        try? client.rebuild(customHoliday: customHoliday)
+    func loadSnapshot(includePreviousPeriod: Bool) async throws -> AttendanceSnapshot {
+        try await snapshotLoader(includePreviousPeriod)
     }
     func saveSession(isCurrent: () -> Bool) async throws -> Bool {
         try sessionSaver(currentCookies)
@@ -309,12 +325,6 @@ final class WorkBarModel: ObservableObject {
             if let snapshot { scheduleReminderCheck(snapshot) }
         }
     }
-    @Published var customHoliday: CustomHolidayRule? {
-        didSet {
-            preferences.customHoliday = customHoliday
-            applyCustomHoliday()
-        }
-    }
     @Published private(set) var reminderMessage: String?
     @Published private(set) var isTestingNotification = false
 
@@ -322,6 +332,7 @@ final class WorkBarModel: ObservableObject {
     private let flex: AttendanceBackend
     var loginWebDataStore: WKWebsiteDataStore { backend.webDataStore }
     private let preferences: Preferences
+    private var fetchedSnapshot: AttendanceSnapshot?
     private let notificationAuthorizationStatus: () async -> UNAuthorizationStatus
     private let requestNotificationAuthorization: () async throws -> Bool
     private let sendNotification: (UNNotificationRequest) async throws -> Void
@@ -360,8 +371,6 @@ final class WorkBarModel: ObservableObject {
         self.remindersEnabled = preferences.remindersEnabled
         self.reminderMode = preferences.reminderMode
         self.reminderDelayMinutes = preferences.reminderDelayMinutes
-        // Assigning the wrapper directly: an optional @Published already holds nil, so `self.customHoliday =` would run didSet.
-        self._customHoliday = Published(initialValue: preferences.customHoliday)
         restoreSelectedSession()
     }
 
@@ -408,20 +417,22 @@ final class WorkBarModel: ObservableObject {
               ServerClock(offset: fresh.serverClockOffset, updatedAt: fresh.updatedAt).isFresh(at: date) else { return }
         fresh.advanceLiveTime(to: date)
         if fresh.todayMinutes != snapshot?.todayMinutes || fresh.attendanceNote != snapshot?.attendanceNote {
+            fetchedSnapshot?.advanceLiveTime(to: date)
             snapshot = fresh
         }
     }
 
-    /// Applies the holiday setting from the last load right away; flex's rate limit makes a refetch take seconds.
-    private func applyCustomHoliday() {
-        guard loginCompleted, !isSigningOut, snapshot?.service == selectedService,
-              let rebuilt = backend.rebuildSnapshot(customHoliday: customHoliday) else {
-            Task { await refresh() }
-            return
-        }
-        snapshot = rebuilt
+    func setLeave(_ type: LeaveType?, on date: String) {
+        guard loginCompleted, !isSigningOut, let raw = fetchedSnapshot,
+              raw.service == selectedService,
+              date >= raw.month.startDate, date <= raw.month.endDate,
+              raw.calendarRecords.contains(where: { $0.date == date }) else { return }
+        var leaves = preferences.leaveByDate(for: raw)
+        leaves[date] = type
+        preferences.setLeaveByDate(leaves, for: raw)
+        snapshot = raw.applyingLeave(leaves)
         advanceLiveTime()
-        scheduleReminderCheck(rebuilt)
+        if let snapshot { scheduleReminderCheck(snapshot) }
     }
 
     private var backend: AttendanceBackend { selectedService == .flex ? flex : wantedSpace }
@@ -454,6 +465,7 @@ final class WorkBarModel: ObservableObject {
         sessionEpoch.invalidate()
         isRefreshing = false
         snapshot = nil
+        fetchedSnapshot = nil
         loginCompleted = false
         loginFailureMessage = nil
         reminderTimer?.invalidate()
@@ -494,11 +506,11 @@ final class WorkBarModel: ObservableObject {
             isRefreshing = false
         }
         do {
-            let holiday = customHoliday
-            let fresh = try await backend.loadSnapshot(includePreviousPeriod: remindersEnabled && reminderMode == .average,
-                                                       customHoliday: holiday)
+            let raw = try await backend.loadSnapshot(includePreviousPeriod: remindersEnabled && reminderMode == .average)
             guard sessionEpoch.isCurrent(revision),
                   try await backend.saveSession(isCurrent: { sessionEpoch.isCurrent(revision) }) else { return false }
+            fetchedSnapshot = raw
+            let fresh = raw.applyingLeave(preferences.leaveByDate(for: raw))
             snapshot = fresh
             hasSavedSession = true
             loginCompleted = true
@@ -510,8 +522,6 @@ final class WorkBarModel: ObservableObject {
                 guard sessionEpoch.isCurrent(revision), !isSigningOut else { return false }
                 await remindIfNeeded(fresh, revision: revision)
             }
-            // A setting change during this fetch was overwritten by this older-setting snapshot.
-            if customHoliday != holiday { applyCustomHoliday() }
             return sessionEpoch.isCurrent(revision) && loginCompleted
         } catch {
             guard sessionEpoch.isCurrent(revision) else { return false }
@@ -519,6 +529,7 @@ final class WorkBarModel: ObservableObject {
             switch backend.failure(for: error, hadSession: hasSavedSession) {
             case let .signedOut(loginMessage, status):
                 snapshot = nil
+                fetchedSnapshot = nil
                 hasSavedSession = false
                 loginFailureMessage = loginMessage
                 message = status
@@ -894,25 +905,34 @@ struct LaunchLabel: View {
         guard let snapshot = model.snapshot else { return model.message }
         guard snapshot.attendanceKnown else { return snapshot.attendanceDescription }
         guard snapshot.record?.start?.isEmpty == false else { return snapshot.menuTitle }
-        guard let meter = snapshot.minimumTodayMeter else { return "\(snapshot.menuTitle) · 진행률 확인 불가" }
+        guard let meter = snapshot.minimumTodayMeter else {
+            let dailyTarget = snapshot.dailyTargetMinutes.flatMap { $0 > 0 ? $0 : nil } ?? snapshot.month.dailyRequiredMinutes
+            let reason = snapshot.record.flatMap { snapshot.leaveByDate[$0.date]?.title } ?? "최소 목표 없음"
+            return "\(snapshot.menuTitle) · \(reason) · 일일 기준 \(AttendanceSnapshot.duration(dailyTarget))"
+        }
         let state = snapshot.record?.end?.isEmpty == false ? "퇴근 완료 · " : ""
         let extra = snapshot.minimumTodayOvertimeMinutes > 0
             ? " · 최소 목표 초과 \(AttendanceSnapshot.duration(snapshot.minimumTodayOvertimeMinutes))" : ""
-        if meter.targetMinutes == 0 { return "\(state)\(snapshot.monthTitle) 필수 근무시간 달성\(extra)" }
+        if meter.targetMinutes == 0 {
+            return "\(state)\(snapshot.monthTitle) 필수 근무시간 달성 · 일일 기준 \(AttendanceSnapshot.duration(snapshot.dailyTargetMinutes.flatMap { $0 > 0 ? $0 : nil } ?? snapshot.month.dailyRequiredMinutes))\(extra)"
+        }
         return "\(state)\(snapshot.dayTitle) \(AttendanceSnapshot.duration(meter.actualMinutes)) / 최소 \(AttendanceSnapshot.duration(meter.targetMinutes)) · \(meter.percent)%\(extra)"
     }
 
     static func progressImage(snapshot: AttendanceSnapshot?) -> NSImage {
-        let record = snapshot?.attendanceKnown == true ? snapshot?.record : nil
-        let started = record?.start?.isEmpty == false
-        let finished = started && record?.end?.isEmpty == false
-        let waiting = record != nil && !started
         let meter = snapshot?.minimumTodayMeter
+        let attendanceKnown = snapshot?.attendanceKnown == true
+        let started = attendanceKnown && snapshot?.record?.start?.isEmpty == false
+        let finished = started && snapshot?.record?.end?.isEmpty == false
+        let waiting = attendanceKnown && snapshot?.record != nil && !started
         let actual = started ? max(0, snapshot?.todayMinutes ?? 0) : 0
-        let target = max(0, meter?.targetMinutes ?? actual)
+        let fallback = snapshot?.dailyTargetMinutes.flatMap { $0 > 0 ? $0 : nil }
+            ?? snapshot?.month.dailyRequiredMinutes
+        let target = max(0, meter.flatMap { $0.targetMinutes > 0 ? $0.targetMinutes : nil }
+            ?? (attendanceKnown ? fallback : nil) ?? 0)
         let hours = 8
-        let colors: [NSColor] = meter == nil ? [.secondaryLabelColor]
-            : target > 0 ? [.systemGreen, .systemYellow, .systemRed] : [.systemYellow]
+        let colors: [NSColor] = attendanceKnown && (meter != nil || started && target > 0)
+            ? [.systemGreen, .systemYellow, .systemRed] : [.secondaryLabelColor]
         let segment = 360 / CGFloat(hours)
         let gap: CGFloat = hours > 1 ? 10 : 0
         func arc(_ hour: Int, _ fraction: Double, inner: CGFloat = 4.5, outer: CGFloat = 8.5) {
@@ -937,7 +957,8 @@ struct LaunchLabel: View {
                     arc(hour, Double(worked) / Double(capacity))
                 }
                 for (lap, color) in colors.enumerated() {
-                    let minutes = min(capacity, max(0, Double(actual - lap * target) - Double(hour) * capacity))
+                    let lapTarget = Double(target > 0 ? target : 480)
+                    let minutes = min(capacity, max(0, Double(actual) - Double(lap) * lapTarget - Double(hour) * capacity))
                     guard minutes > 0 else { continue }
                     color.setFill()
                     arc(hour, Double(minutes) / Double(capacity), inner: finished ? 7 : 4.5)
@@ -1032,11 +1053,6 @@ struct WorkOptionsWindow: View {
                     Text(message).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if model.selectedService == .flex {
-                Section("사용자 지정 휴일") {
-                    CustomHolidaySettings(model: model)
-                }
-            }
             Section("앱 업데이트") {
                 Toggle("새 버전 자동 확인", isOn: $updater.automaticChecks)
                 Text(updater.message).font(.caption).foregroundStyle(.secondary)
@@ -1085,7 +1101,7 @@ struct WorkMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "calendar")
                     .font(.title3.weight(.semibold))
@@ -1112,16 +1128,18 @@ struct WorkMenu: View {
             }
             if let snapshot = model.snapshot {
                 HStack(alignment: .top, spacing: 20) {
-                    AttendanceCalendarView(snapshot: snapshot)
+                    AttendanceCalendarView(snapshot: snapshot, canEditLeave: model.loginCompleted, setLeave: model.setLeave)
                         .id("\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)-\(snapshot.month.startDate)-\(snapshot.record?.date ?? "")")
-                        .frame(width: 350)
-                    VStack(alignment: .leading, spacing: 20) {
-                        TodaySummary(snapshot: snapshot)
-                        Divider()
-                        MonthSummary(snapshot: snapshot)
+                        .frame(width: 350, height: 540, alignment: .top)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            TodaySummary(snapshot: snapshot)
+                            Divider()
+                            MonthSummary(snapshot: snapshot)
+                        }
+                        .padding(16)
                     }
-                    .padding(16)
-                    .frame(width: 318)
+                    .frame(width: 318, height: 540)
                     .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
                 }
             } else {
@@ -1132,10 +1150,12 @@ struct WorkMenu: View {
             if model.snapshot != nil && model.message != "방금 업데이트됨" {
                 Text(model.message)
                     .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
         }
         .padding(20)
-        .frame(width: model.snapshot == nil ? 400 : 728)
+        .frame(width: model.snapshot == nil ? 400 : 728,
+               height: model.snapshot == nil ? nil : 660, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 }
@@ -1170,7 +1190,7 @@ struct AttendanceCalendarMonth {
         let count = calendar.range(of: .day, in: .month, for: start)!.count
         let dates = (0..<count).map { calendar.date(byAdding: .day, value: $0, to: start) }
         days = Array(repeating: nil, count: leading) + dates
-            + Array(repeating: nil, count: (7 - (leading + count) % 7) % 7)
+            + Array(repeating: nil, count: 42 - leading - count)
         self.calendar = calendar
         self.formatter = formatter
         referenceDate = reference
@@ -1197,8 +1217,8 @@ struct CalendarDayDetail {
         record = snapshot.record?.date == key ? snapshot.record : snapshot.calendarRecords.first { $0.date == key }
     }
     var holiday: String? {
+        if let leave = snapshot.leaveByDate[key] { return leave.title }
         if let holiday = snapshot.calendarHolidays[key] { return holiday.name }
-        if snapshot.customHolidayDeduction?.dates.contains(key) == true { return "사용자 지정 휴일" }
         return nil
     }
     var status: String {
@@ -1222,6 +1242,8 @@ struct CalendarDayDetail {
 
 struct AttendanceCalendarView: View {
     let snapshot: AttendanceSnapshot
+    let canEditLeave: Bool
+    let setLeave: (LeaveType?, String) -> Void
     @State private var displayedMonth: Date?
     @State private var selectedDate: Date?
 
@@ -1229,7 +1251,7 @@ struct AttendanceCalendarView: View {
         let month = AttendanceCalendarMonth(snapshot: snapshot, displaying: displayedMonth)
         let selection = selectedDate ?? month.referenceDate
         let selectedKey = month.key(selection)
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Text(month.title).font(.system(size: 24, weight: .bold, design: .rounded))
                 Spacer()
@@ -1273,7 +1295,7 @@ struct AttendanceCalendarView: View {
                                 if let date = month.days[week * 7 + weekday] {
                                     dayCell(date, month: month, selectedKey: selectedKey)
                                 } else {
-                                    Color.clear.frame(height: 48)
+                                    Color.clear.frame(height: 38)
                                         .accessibilityHidden(true)
                                 }
                             }
@@ -1304,11 +1326,12 @@ struct AttendanceCalendarView: View {
                     .font(.system(size: 13, weight: selected || today ? .bold : .medium, design: .rounded))
                     .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
                 Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
-                     ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
+                     ?? (snapshot.leaveByDate[key].map { $0 == .paid ? "유급" : "무급" }
+                         ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—")))
                     .font(.system(size: 9, weight: .medium)).monospacedDigit()
                     .foregroundStyle(selected ? Color.white.opacity(0.9) : detail.minutes != nil ? color : .secondary)
             }
-            .frame(maxWidth: .infinity).frame(height: 48)
+            .frame(maxWidth: .infinity).frame(height: 38)
             .background(selected ? WorkProgressBar.confirmedColor : detail.minutes != nil ? color.opacity(0.09) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 10))
             .overlay {
@@ -1325,7 +1348,7 @@ struct AttendanceCalendarView: View {
     }
 
     private func selectedDay(_ detail: CalendarDayDetail, date: Date, month: AttendanceCalendarMonth) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(month.calendar.component(.month, from: date))월 \(month.calendar.component(.day, from: date))일")
                     .font(.headline)
@@ -1334,19 +1357,37 @@ struct AttendanceCalendarView: View {
                 }
                 Spacer()
                 Text(detail.status).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    .lineLimit(1).help(detail.status)
             }
             Text(detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
                 .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
-            if let record = detail.record {
-                Text(detail.key == snapshot.record?.date ? snapshot.attendanceDescription :
-                     "출근 \(AttendanceSnapshot.clock(record.start)) · 퇴근 \(AttendanceSnapshot.clock(record.end))")
-                    .font(.caption).foregroundStyle(.secondary)
+            Text(detail.record.map { record in
+                detail.key == snapshot.record?.date ? snapshot.attendanceDescription :
+                    "출근 \(AttendanceSnapshot.clock(record.start)) · 퇴근 \(AttendanceSnapshot.clock(record.end))"
+            } ?? "출퇴근 기록 없음")
+                .font(.caption).foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(detail.holiday ?? " ")
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .help(detail.holiday ?? "")
+            Picker("휴가", selection: Binding(
+                get: { snapshot.leaveByDate[detail.key] },
+                set: { setLeave($0, detail.key) })) {
+                Text("휴가 없음").tag(LeaveType?.none)
+                ForEach(LeaveType.allCases, id: \.self) { type in
+                    Text(type.title).tag(Optional(type))
+                }
             }
-            if let holiday = detail.holiday, holiday != detail.status {
-                Text(holiday).font(.caption).foregroundStyle(.secondary)
-            }
+            .pickerStyle(.segmented)
+            .disabled(!canEditLeave || detail.key < snapshot.month.startDate ||
+                      detail.key > snapshot.month.endDate ||
+                      !snapshot.calendarRecords.contains { $0.date == detail.key })
+            .accessibilityLabel("\(detail.key) 휴가")
+            Text("앱 내 계산에만 반영 · 회사에 신청하지 않음")
+                .font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 160, alignment: .top)
     }
 }
 
@@ -1358,8 +1399,8 @@ struct TodaySummary: View {
             HStack {
                 Text(snapshot.dayTitle).font(.subheadline.weight(.semibold))
                 Spacer()
-                if snapshot.minimumTodayMeter != nil {
-                    Text("\(Int((snapshot.minimumTodayFill * 100).rounded()))% 달성")
+                if let minimum = snapshot.minimumTodayMeter {
+                    Text(minimum.targetMinutes > 0 ? "\(minimum.percent)% 달성" : "목표 달성")
                         .font(.subheadline.weight(.semibold))
                 }
             }
@@ -1369,13 +1410,15 @@ struct TodaySummary: View {
                 Text("최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
                     .font(.caption).foregroundStyle(.secondary)
                 WorkProgressBar(fill: snapshot.minimumTodayFill, markers: [],
-                                value: "실제 \(Int((snapshot.minimumTodayFill * 100).rounded()))%",
+                                value: minimum.targetMinutes > 0 ? "실제 \(minimum.percent)%" : "필수시간 달성",
                                 label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
                 if minimum.targetMinutes == 0 {
                     Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
                 }
             } else {
-                Text(snapshot.attendanceKnown ? "남은 근무일 없음" : "진행률 확인 불가").font(.caption)
+                Text(snapshot.attendanceKnown
+                     ? snapshot.record.flatMap { snapshot.leaveByDate[$0.date]?.title } ?? "남은 근무일 없음"
+                     : "진행률 확인 불가").font(.caption)
             }
             Text(snapshot.attendanceDescription).font(.caption)
             if let note = snapshot.attendanceNote {
@@ -1385,44 +1428,6 @@ struct TodaySummary: View {
     }
 }
 
-struct CustomHolidaySettings: View {
-    @ObservedObject var model: WorkBarModel
-
-    var body: some View {
-        Toggle("매달 반복 휴무", isOn: Binding(
-            get: { model.customHoliday != nil },
-            set: { model.customHoliday = $0 ? CustomHolidayRule(weekday: 4, ordinals: []) : nil }))
-        if let rule = model.customHoliday {
-            Picker("요일", selection: Binding(get: { rule.weekday }, set: { model.customHoliday?.weekday = $0 })) {
-                ForEach(1...7, id: \.self) { Text(["일", "월", "화", "수", "목", "금", "토"][$0 - 1] + "요일").tag($0) }
-            }
-            HStack {
-                ForEach(1...5, id: \.self) { n in
-                    Toggle("\(n)번째", isOn: Binding(get: { rule.ordinals.contains(n) }, set: { on in
-                        if on { model.customHoliday?.ordinals.insert(n) } else { model.customHoliday?.ordinals.remove(n) }
-                    }))
-                    .toggleStyle(.checkbox)
-                }
-            }
-            HStack {
-                Text("차감 대상")
-                Toggle("필수시간", isOn: Binding(get: { rule.affectsRequired },
-                                              set: { model.customHoliday?.affectsRequired = $0 }))
-                Toggle("최대 근무시간", isOn: Binding(get: { rule.affectsMaximum },
-                                                set: { model.customHoliday?.affectsMaximum = $0 }))
-                Toggle("수당 기준", isOn: Binding(get: { rule.affectsCompensation },
-                                              set: { model.customHoliday?.affectsCompensation = $0 }))
-            }
-            .toggleStyle(.checkbox)
-            Text("체크한 항목에서만 그날 소정근로시간만큼 뺍니다. 남은 근무일과 출근 알림에서는 항상 제외합니다.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        if let snapshot = model.snapshot, snapshot.service == .flex {
-            MonthSummary(snapshot: snapshot)
-                .opacity(model.isRefreshing ? 0.5 : 1)
-        }
-    }
-}
 
 struct MonthSummary: View {
     let snapshot: AttendanceSnapshot
@@ -1431,8 +1436,7 @@ struct MonthSummary: View {
         VStack(alignment: .leading, spacing: 7) {
             let month = snapshot.displayMonth
             let compensation = snapshot.displayCompensationEstimate
-            // Custom holidays take the right end so the bar spans flex's own totals.
-            let holiday = snapshot.customHolidayDeduction?.maximumMinutes ?? 0
+            let holiday = snapshot.leaveDeduction?.maximumMinutes ?? 0
             let range = holiday + max(month.maximumWorkMinutes ?? 0,
                                       max(month.targetMinutes, compensation?.thresholdMinutes ?? 0))
             let meter = WorkMeter(actualMinutes: month.creditedMinutes, targetMinutes: range)
@@ -1504,7 +1508,7 @@ struct MonthSummary: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let deduction = snapshot.customHolidayDeduction, !deduction.dates.isEmpty {
+            if let deduction = snapshot.leaveDeduction, !deduction.dates.isEmpty {
                 let dates = deduction.dates.map { date in
                     let parts = date.split(separator: "-").compactMap { Int($0) }
                     return parts.count == 3 ? "\(parts[1])/\(parts[2])" : date
@@ -1514,7 +1518,7 @@ struct MonthSummary: View {
                         .font(.system(size: 8))
                         .foregroundStyle(WorkProgressBar.holidayColor)
                         .accessibilityHidden(true)
-                    Text("휴일 \(dates.joined(separator: ", ")) · −\(AttendanceSnapshot.duration(deduction.minutes))")
+                    Text("휴가 \(dates.joined(separator: ", ")) · −\(AttendanceSnapshot.duration(deduction.minutes))")
                 }
                 .font(.caption)
             }

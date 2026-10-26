@@ -27,11 +27,9 @@ struct FlexViewTests {
         snapshot.advanceLiveTime(to: now)
         snapshot.todayCreditedMinutesInMonth = 0
         snapshot.compensationEstimate = CompensationEstimate(month: report, days: [], holidays: [:])
-        snapshot.customHolidayDeduction = CustomHolidayDeduction(dates: ["2026-10-14", "2026-10-28"], minutes: 960,
-            maximumMinutes: 960, flexRequiredMinutes: 10560, flexMaximumMinutes: 14772)
         defaults.set(false, forKey: "clockInRemindersEnabled")
         var fetchError: Error?
-        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in
+        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _ in
             if let fetchError { throw fetchError }
             return snapshot
         }),
@@ -73,18 +71,13 @@ struct FlexViewTests {
         precondition(menuText.contains("누적75시간0분"), menuText)
         precondition(menuText.contains("14일") && menuText.contains("6.6시간"), menuText)
         precondition(menuText.contains("92시간10분") && menuText.contains("230시간12분"), menuText)
-        precondition(menuText.contains("휴일10/14,10/28") && menuText.contains("16시간0분"), menuText)
-        precondition(!menuText.contains("설정기준"), menuText)
         model.advanceLiveTime(to: now.addingTimeInterval(60))
         let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 728, height: 680)
         precondition(nextMinute.contains("누적75시간1분") && nextMinute.contains("92시간9분"), nextMinute)
-        model.customHoliday = CustomHolidayRule(weekday: 4, ordinals: [2, 4])
         let updater = AppUpdater(appURL: output.appendingPathComponent("missing.app"), defaults: defaults,
                                  logURL: output.appendingPathComponent("update.log"))
         let optionsText = try render(WorkOptionsWindow(model: model, onboarding: OnboardingState(defaults: defaults), updater: updater),
                                      "options", width: 440, height: 640)
-        // The preview bar sits right under the deduction checkboxes.
-        precondition(optionsText.contains("차감대상") && optionsText.contains("필수시간대비42%"), optionsText)
         precondition(optionsText.contains("flex연결됨"), optionsText)
         fetchError = FlexError.invalidData("퇴근 기록에 대응하는 근무 내역이 없습니다.")
         _ = await model.refresh()
@@ -104,8 +97,7 @@ struct FlexViewTests {
         model.beginSignIn()
         _ = try render(OnboardingWindow(model: model, onboarding: onboarding), "onboarding", width: 920, height: 760)
         for _ in 0..<3 { onboarding.next(isSignedIn: true) }
-        let holidayStep = try render(OnboardingWindow(model: model, onboarding: onboarding), "onboarding-holiday", width: 920, height: 760)
-        precondition(holidayStep.contains("정기휴무설정") && holidayStep.contains("차감대상"), holidayStep)
+        _ = try render(OnboardingWindow(model: model, onboarding: onboarding), "onboarding-calendar", width: 920, height: 760)
         print("Flex view checks passed: \(output.path)")
     }
 }

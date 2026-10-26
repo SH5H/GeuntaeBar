@@ -28,4 +28,6 @@ swiftc -DWORKBAR_TESTS $app_sources $T/FlexViewTests.swift -o "$build_tmp/flex-v
 "$build_tmp/login-tests"
 swiftc -DWORKBAR_TESTS $app_sources $T/MenuTests.swift -o "$build_tmp/menu-tests"
 "$build_tmp/menu-tests"
+swiftc -DWORKBAR_TESTS $app_sources $T/CalendarTests.swift -o "$build_tmp/calendar-tests"
+"$build_tmp/calendar-tests"
 echo "All checks passed"

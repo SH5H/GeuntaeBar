@@ -183,22 +183,28 @@ struct MenuTests {
             unknown.attendanceKnown = false
             let missing = try renderIcon(unknown, name: "unknown-attendance", appearance: appearance)
             precondition(missing.pixelsWide == 36 && missing.colorAt(x: 18, y: 18)!.alphaComponent == 0)
-            var offDay = iconSnapshot(WorkMeter(actualMinutes: 150, targetMinutes: 360), finished: true)!
-            offDay = AttendanceSnapshot(record: DailyRecord(date: date, start: start, end: scheduledEnd,
-                workedMinutes: 150, holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE"),
-                month: offDay.month, remainingWorkDays: 0, updatedAt: now)
-            precondition(offDay.minimumTodayMeter == nil)
-            let noTarget = try renderIcon(offDay, name: "ended-no-target", appearance: appearance)
-            precondition(noTarget.pixelsWide == 36)
-            appearance.performAsCurrentDrawingAppearance {
-                precondition(ringPixel(noTarget, hours: 8, hour: 0, at: 0.5, radius: 7.75).alphaComponent > 0.9)
-                precondition(matches(ringPixel(noTarget, hours: 8, hour: 2, at: 0.3, radius: 5.5), .systemGray))
-                precondition(matches(ringPixel(noTarget, hours: 8, hour: 2, at: 0.8, radius: 5.5), .systemGray))
-                for hour in 0..<8 {
-                    let pixel = ringPixel(noTarget, hours: 8, hour: hour, at: 0.3, radius: 7.75)
-                    precondition(!matches(pixel, .systemYellow) && !matches(pixel, .systemRed))
-                }
+            for (minutes, dailyTarget, expected) in [
+                (200, Optional(360), NSColor.systemGreen),
+                (650, Optional(360), NSColor.systemYellow),
+                (1100, Optional(0), NSColor.systemRed),
+            ] {
+                var offDay = iconSnapshot(WorkMeter(actualMinutes: minutes, targetMinutes: 360), finished: true)!
+                offDay = AttendanceSnapshot(record: DailyRecord(date: date, start: start, end: scheduledEnd,
+                    workedMinutes: minutes, holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE"),
+                    month: offDay.month, remainingWorkDays: 0, updatedAt: now)
+                offDay.dailyTargetMinutes = dailyTarget
+                precondition(offDay.minimumTodayMeter == nil)
+                let fallbackIcon = try renderIcon(offDay, name: "ended-daily-fallback-\(minutes)", appearance: appearance)
+                precondition(fallbackIcon.pixelsWide == 36)
+                let pixel = ringPixel(fallbackIcon, hours: 8, hour: 0, at: 0.3, radius: 7.75)
+                precondition(matches(pixel, expected))
             }
+            var zeroMinimum = iconSnapshot(WorkMeter(actualMinutes: 650, targetMinutes: 0), finished: false)!
+            zeroMinimum.dailyTargetMinutes = 360
+            precondition(zeroMinimum.minimumTodayMeter?.targetMinutes == 0)
+            let zeroTargetIcon = try renderIcon(zeroMinimum, name: "zero-minimum-daily-target", appearance: appearance)
+            precondition(matches(ringPixel(zeroTargetIcon, hours: 8, hour: 0, at: 0.3, radius: 6.5),
+                                .systemYellow))
         }
 
         func render(_ record: DailyRecord, days: Int = 2, required: Int = 7680, report: MonthlyReport? = nil,
@@ -221,11 +227,20 @@ struct MenuTests {
                                      snapshotLoader: { _ in snapshot }, sessionSaver: { _ in }), defaults: defaults)
             let refreshed = await model.refresh()
             precondition(refreshed)
-            let renderer = ImageRenderer(content: WorkMenu(model: model)
+            let view = NSHostingView(rootView: WorkMenu(model: model)
                 .environment(\.colorScheme, .light).background(Color.white))
-            renderer.scale = 2
-            let image = renderer.cgImage!
-            let bitmap = NSBitmapImageRep(cgImage: image)
+            view.appearance = NSAppearance(named: .aqua)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: view.fittingSize),
+                styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = view
+            window.makeKeyAndOrderFront(nil)
+            defer { window.close() }
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
+            let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let image = bitmap.cgImage!
             try bitmap.representation(using: .png, properties: [:])!
                 .write(to: output.appendingPathComponent("\(name).png"))
             let request = VNRecognizeTextRequest()
@@ -247,11 +262,29 @@ struct MenuTests {
         precondition(texts.joined().contains("예상퇴근18:00"))
         precondition(texts.joined().contains("필수시간대비94%"))
         precondition(texts.joined().contains("최대160시간0분"))
+        let overtime = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
+                                  currentMinutes: 600, holidayStatus: workday)
+        let overtimeMonth = MonthlyReport(workedMinutes: 6960 + 600, outsideMinutes: 0,
+            requiredMinutes: 7680, vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+            startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: 9600)
+        let overtimeSnapshot = AttendanceSnapshot(record: overtime, month: overtimeMonth,
+            remainingWorkDays: 2, updatedAt: now)
+        let summaryRenderer = ImageRenderer(content: TodaySummary(snapshot: overtimeSnapshot)
+            .frame(width: 360).environment(\.colorScheme, .light).background(Color.white))
+        summaryRenderer.scale = 2
+        let summaryImage = summaryRenderer.cgImage!
+        let summaryRequest = VNRecognizeTextRequest()
+        summaryRequest.recognitionLanguages = ["ko-KR", "en-US"]
+        try VNImageRequestHandler(cgImage: summaryImage).perform([summaryRequest])
+        let summaryText = (summaryRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            .joined().filter { !$0.isWhitespace }
+        precondition(summaryText.contains("167%"), summaryText)
+
 
         let reached = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 480, holidayStatus: workday)
         let (_, reachedTexts) = try await render(reached, name: "reached")
-        precondition(reachedTexts.joined().contains("100%달성"))
+        precondition(reachedTexts.joined().contains("133%"))
         let (_, zeroTexts) = try await render(working, required: 6600, name: "zero-target")
         precondition(zeroTexts.joined().contains("이번달필수시간달성"))
 

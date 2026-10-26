@@ -226,13 +226,13 @@ struct DailyRecord: Decodable {
 struct MonthlyReport: Decodable {
     var workedMinutes: Int
     let outsideMinutes: Int
-    let requiredMinutes: Int
+    var requiredMinutes: Int
     let vacationMinutes: Int
     let weekendMinutes: Int
     let dailyRequiredMinutes: Int
     let startDate: String
     let endDate: String
-    let maximumWorkMinutes: Int?
+    var maximumWorkMinutes: Int?
     var targetCreditedMinutes: Int? = nil
 
     enum CodingKeys: String, CodingKey {
@@ -294,12 +294,11 @@ struct LiveWorkClock {
     }
 }
 
-struct CustomHolidayDeduction {
-    let dates: [String]
-    let minutes: Int
-    let maximumMinutes: Int // Portion taken off the monthly maximum; the bar shows it as the black end.
-    let flexRequiredMinutes: Int
-    let flexMaximumMinutes: Int?
+enum LeaveType: String, Codable, CaseIterable {
+    case paid
+    case unpaid
+
+    var title: String { self == .paid ? "유급 휴가" : "무급 휴가" }
 }
 
 struct ClockInReminderPlan {
@@ -353,10 +352,16 @@ struct ServerClock {
     }
 }
 
+struct LeaveDeduction {
+    let dates: [String]
+    let minutes: Int
+    let maximumMinutes: Int
+}
+
 struct AttendanceSnapshot {
     var record: DailyRecord?
-    let month: MonthlyReport
-    let remainingWorkDays: Int
+    var month: MonthlyReport
+    var remainingWorkDays: Int
     let updatedAt: Date
     var calendarRecords: [DailyRecord] = []
     var calendarHolidays: [String: CompanyHoliday] = [:]
@@ -376,7 +381,50 @@ struct AttendanceSnapshot {
     var expectedClockOut: Date? = nil
     var liveWorkClock: LiveWorkClock? = nil
     var serverClockOffset: TimeInterval = 0
-    var customHolidayDeduction: CustomHolidayDeduction? = nil
+    var leaveByDate: [String: LeaveType] = [:]
+    var calendarRequiredMinutes: [String: Int] = [:]
+    var leaveDeduction: LeaveDeduction? = nil
+
+    func applyingLeave(_ leaves: [String: LeaveType]) -> AttendanceSnapshot {
+        var snapshot = self
+        snapshot.leaveByDate = leaves
+        let today = record?.date ?? calendarDate
+        var deductions = 0
+        var paidDeductions = 0
+        var excludedDays = 0
+        var deductedDates: [String] = []
+        for (date, type) in leaves where date >= month.startDate && date <= month.endDate {
+            if let index = calendarRecords.firstIndex(where: { $0.date == date }) {
+                let original = record?.date == date ? record! : calendarRecords[index]
+                excludedDays += Self.remainingScheduledDays(in: [original], during: month,
+                                                            today: today, at: updatedAt)
+                snapshot.calendarRecords[index].scheduledWorkday = false
+                if snapshot.record?.date == date { snapshot.record?.scheduledWorkday = false }
+            }
+            guard let required = calendarRequiredMinutes[date], required > 0,
+                  calendarHolidays[date] == nil else { continue }
+            deductions += required
+            deductedDates.append(date)
+            if type == .paid { paidDeductions += required }
+        }
+        snapshot.month.requiredMinutes = max(0, month.requiredMinutes - deductions)
+        if let maximum = month.maximumWorkMinutes {
+            snapshot.month.maximumWorkMinutes = max(0, maximum - deductions)
+        }
+        snapshot.remainingWorkDays = max(0, remainingWorkDays - excludedDays)
+        snapshot.compensationEstimate?.thresholdMinutes =
+            max(0, (compensationEstimate?.thresholdMinutes ?? 0) - paidDeductions)
+        snapshot.leaveDeduction = deductions > 0
+            ? LeaveDeduction(dates: deductedDates.sorted(),
+                             minutes: month.targetMinutes - snapshot.month.targetMinutes,
+                             maximumMinutes: (month.maximumWorkMinutes ?? 0) - (snapshot.month.maximumWorkMinutes ?? 0))
+            : nil
+        if let date = record?.date, date >= month.startDate, date <= month.endDate, leaves[date] != nil {
+            snapshot.dailyTargetMinutes = 0
+            snapshot.remindersAvailable = false
+        }
+        return snapshot
+    }
 
     mutating func advanceLiveTime(to date: Date) {
         ServerClock(offset: serverClockOffset, updatedAt: updatedAt).advance(&self, deviceNow: date)
@@ -436,6 +484,8 @@ struct AttendanceSnapshot {
     }
     var minimumTodayMeter: WorkMeter? {
         guard attendanceKnown else { return nil }
+        if let date = record?.date, leaveByDate[date] != nil,
+           date >= month.startDate, date <= month.endDate { return nil }
         let days = remainingDaysIncludingToday
         guard days > 0 else { return nil }
         let remainingBeforeToday = max(0, month.targetMinutes - month.creditedMinutes + (todayCreditedMinutesInMonth ?? todayMinutes))
@@ -716,6 +766,10 @@ final class AttendanceClient {
         }
         snapshot.calendarRecords = allRows
         snapshot.calendarHolidays = holidays
+        snapshot.calendarRequiredMinutes = allRows.reduce(into: [:]) { required, row in
+            guard row.date >= report.startDate && row.date <= report.endDate else { return }
+            required[row.date] = row.isScheduledWorkday ? report.dailyRequiredMinutes : 0
+        }
         return snapshot
     }
 

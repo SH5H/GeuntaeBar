@@ -35,6 +35,7 @@ struct CoreTests {
     static func main() async throws {
         monthlyBaselineChecks()
         try flexAccountingChecks()
+        leaveChecks()
         try await renewalChecks()
         try await overnightChecks()
         let json = Data(#"{"wk_date":"2026-09-29","wk_start_time":"2026-09-29T09:00:00+09:00","wk_end_time":null,"wk_end_time_sch":"2026-09-29T18:00:00+09:00","wk_time_min":120,"wk_time_min_now":135,"evt_out_min":15}"#.utf8)
@@ -368,6 +369,54 @@ struct CoreTests {
         }
     }
 
+    static func leaveChecks() {
+        let month = MonthlyReport(workedMinutes: 120, outsideMinutes: 0, requiredMinutes: 960,
+            vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
+            startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: 1440)
+        let today = try! JSONDecoder().decode(DailyRecord.self, from: Data(#"{"wk_date":"2026-10-26","wk_holiday":"WEEKDAY_WORKING_ON_NONE_NONE","wk_start_time":"2026-10-26T09:00:00+09:00","wk_end_time_sch":"2026-10-26T18:00:00+09:00","wk_time_min_now":120}"#.utf8))
+        let future = try! JSONDecoder().decode(DailyRecord.self, from: Data(#"{"wk_date":"2026-10-27","wk_holiday":"WEEKDAY_WORKING_ON_NONE_NONE"}"#.utf8))
+        let updatedAt = ISO8601DateFormatter().date(from: "2026-10-26T20:00:00+09:00")!
+        var raw = AttendanceSnapshot(record: today, month: month, remainingWorkDays: 1, updatedAt: updatedAt)
+        raw.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        raw.calendarRecords = [today, future]
+        raw.calendarRequiredMinutes = ["2026-10-25": 0, "2026-10-26": 480, "2026-10-27": 480, "2026-11-01": 480]
+        raw.liveWorkClock = LiveWorkClock(start: raw.updatedAt.addingTimeInterval(-7200), completedMinutes: 0,
+            rests: [], countsTowardTarget: true)
+        raw.compensationEstimate = CompensationEstimate(month: month, days: [], holidays: [:])
+        let paid = raw.applyingLeave(["2026-10-26": .paid, "2026-10-27": .unpaid, "2026-11-01": .paid])
+        precondition(paid.month.requiredMinutes == 0 && paid.month.maximumWorkMinutes == 480)
+        precondition(paid.compensationEstimate?.thresholdMinutes == 480)
+        precondition(paid.remainingWorkDays == 0 && paid.dailyTargetMinutes == 0 && !paid.remindersAvailable)
+        precondition(paid.todayMinutes == raw.todayMinutes && paid.month.workedMinutes == raw.month.workedMinutes)
+        precondition(paid.leaveDeduction?.dates == ["2026-10-26", "2026-10-27"])
+        precondition(paid.leaveDeduction?.minutes == 960 && paid.leaveDeduction?.maximumMinutes == 960)
+        precondition(paid.remainingWorkDaysAfterToday == 0 && paid.minimumTodayMeter == nil)
+        var holidaySnapshot = raw
+        holidaySnapshot.calendarHolidays["2026-10-27"] = CompanyHoliday(name: "공휴일")
+        let holidayLeave = holidaySnapshot.applyingLeave(["2026-10-27": .paid])
+        precondition(holidayLeave.month.requiredMinutes == raw.month.requiredMinutes)
+        precondition(holidayLeave.leaveByDate["2026-10-27"] == .paid && holidayLeave.leaveDeduction?.minutes == nil)
+        let fullLeave = raw.applyingLeave(["2026-10-25": .paid])
+        precondition(fullLeave.month.requiredMinutes == raw.month.requiredMinutes)
+        precondition(fullLeave.leaveByDate["2026-10-25"] == .paid && fullLeave.leaveDeduction?.minutes == nil)
+        var advanced = paid
+        advanced.advanceLiveTime(to: raw.updatedAt.addingTimeInterval(60))
+        precondition(advanced.todayMinutes == 121)
+        precondition(raw.applyingLeave([:]).month.requiredMinutes == 960)
+        let unpaid = raw.applyingLeave(["2026-10-27": .unpaid])
+        precondition(unpaid.month.requiredMinutes == 480 && unpaid.compensationEstimate?.thresholdMinutes == 960)
+        let ended = DailyRecord(date: today.date, start: today.start, end: "2026-10-26T12:00:00+09:00",
+            scheduledEnd: today.scheduledEnd, workedMinutes: 120, holidayStatus: today.holidayStatus)
+        var early = AttendanceSnapshot(record: ended, month: month, remainingWorkDays: 1,
+            updatedAt: ISO8601DateFormatter().date(from: "2026-10-26T13:00:00+09:00")!)
+        early.timeZone = raw.timeZone
+        early.calendarRecords = [ended, future]
+        early.calendarRequiredMinutes = raw.calendarRequiredMinutes
+        let endedLeave = early.applyingLeave([today.date: .paid])
+        precondition(endedLeave.remainingWorkDaysAfterToday == 1,
+                     "A completed shift must not remove another future workday")
+        precondition(endedLeave.record?.workedMinutes == 120 && endedLeave.record?.isScheduledWorkday == false)
+    }
     static func flexAccountingChecks() throws {
         var month = MonthlyReport(workedMinutes: 4200, outsideMinutes: 0, requiredMinutes: 9600,
             vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 480,
@@ -473,6 +522,14 @@ struct CoreTests {
         precondition(after.minimumTodayMeter?.targetMinutes == before.minimumTodayMeter?.targetMinutes)
         precondition(after.expectedMinutesByNow == before.expectedMinutesByNow)
         precondition(after.remainingWorkDays == 2)
+        precondition(after.calendarRequiredMinutes["2026-10-03"] == 480)
+        let wantedLeave = after.applyingLeave(["2026-10-03": .paid])
+        precondition(wantedLeave.leaveDeduction?.dates == ["2026-10-03"])
+        precondition(wantedLeave.leaveDeduction?.minutes == 480)
+        precondition(wantedLeave.month.requiredMinutes == after.month.requiredMinutes - 480)
+        precondition(wantedLeave.calendarRecords.first { $0.date == "2026-10-03" }?.isScheduledWorkday == false)
+        precondition(wantedLeave.remainingWorkDaysAfterToday == after.remainingWorkDaysAfterToday - 1)
+        precondition(after.applyingLeave([:]).month.requiredMinutes == after.month.requiredMinutes)
         precondition(!after.shouldRemindToClockIn(at: ISO8601DateFormatter().date(from: "2026-10-03T10:00:00+09:00")!,
                                                  mode: .scheduled, delayMinutes: 0))
         precondition(AttendanceStubProtocol.requests.contains("/work/work_time/work_report/?date=2026-10-02"))

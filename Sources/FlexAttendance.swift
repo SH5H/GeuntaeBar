@@ -151,31 +151,6 @@ struct FlexRule: Decodable {
     let baseAgreedDayWorkingMinutes: Int
 }
 
-struct CustomHolidayRule: Codable, Equatable {
-    var weekday: Int // Calendar weekday, 1 = Sunday
-    var ordinals: Set<Int> // n-th occurrence of the weekday in its month, 1...5
-    // Which monthly figures the holiday lowers.
-    var affectsRequired = true
-    var affectsMaximum = true
-    var affectsCompensation = true
-
-    func contains(_ date: Date, calendar: Calendar) -> Bool {
-        calendar.component(.weekday, from: date) == weekday &&
-            ordinals.contains((calendar.component(.day, from: date) - 1) / 7 + 1)
-    }
-}
-
-extension CustomHolidayRule {
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        weekday = try container.decode(Int.self, forKey: .weekday)
-        ordinals = try container.decode(Set<Int>.self, forKey: .ordinals)
-        // Rules saved before these options existed keep the original behavior.
-        affectsRequired = try container.decodeIfPresent(Bool.self, forKey: .affectsRequired) ?? true
-        affectsMaximum = try container.decodeIfPresent(Bool.self, forKey: .affectsMaximum) ?? true
-        affectsCompensation = try container.decodeIfPresent(Bool.self, forKey: .affectsCompensation) ?? true
-    }
-}
 
 enum FlexAttendance {
     private static func interval(_ block: FlexSchedule.Block) throws -> DateInterval {
@@ -205,8 +180,7 @@ enum FlexAttendance {
 
     static func snapshot(period: FlexPeriod, summary: FlexPeriodSummary, today: FlexDailySummary,
                          status: FlexClockStatus, schedules: [FlexSchedule], attributes: [FlexDayAttribute],
-                         rule: FlexRule, customHoliday: CustomHolidayRule? = nil,
-                         serverClockOffset: TimeInterval = 0) throws -> AttendanceSnapshot {
+                         rule: FlexRule, serverClockOffset: TimeInterval = 0) throws -> AttendanceSnapshot {
         guard let zone = TimeZone(identifier: period.zoneId), status.appliedZoneId == period.zoneId,
               summary.result.timezone == period.zoneId else { throw FlexError.invalidData("근무 기록과 월간 집계의 시간대가 맞지 않습니다.") }
         let calendar = FlexDates.calendar(in: zone)
@@ -248,7 +222,7 @@ enum FlexAttendance {
             cursor = calendar.date(byAdding: .day, value: 1, to: cursor)!
         }
         var rows: [DailyRecord] = [], holidays: [String: CompanyHoliday] = [:]
-        var customHolidayMinutes = 0, customHolidayDates: [String] = []
+        var requiredByDate: [String: Int] = [:]
         var excluded: [DateInterval] = []
         var remindersAvailable = true
         var liveWorkClock: LiveWorkClock?
@@ -272,13 +246,20 @@ enum FlexAttendance {
             let usedLeave = leave.compactMap(\.value.usedMinutes).reduce(0, +)
             let leaveIntervals = try leave.filter { $0.value.startTimestamp != nil && $0.value.endTimestampExclusive != nil }.map(interval)
             let fullLeave = leave.contains { $0.value.allDay == true } || (attribute.usualWorkingMinutes > 0 && usedLeave >= attribute.usualWorkingMinutes)
-            let isFlexWorkday = attribute.dateType == "IN_EMPLOY" && attribute.usualWorkingMinutes > 0 && attribute.dayOffs.isEmpty && day.dayOffs.isEmpty && !fullLeave
-            let isCustomHoliday = isFlexWorkday && customHoliday?.contains(date, calendar: calendar) == true
-            if isCustomHoliday && day.date >= period.from && day.date <= period.to {
-                customHolidayMinutes += attribute.usualWorkingMinutes
-                customHolidayDates.append(day.date)
+            let isWorkday = attribute.dateType == "IN_EMPLOY" && attribute.usualWorkingMinutes > 0 && attribute.dayOffs.isEmpty && day.dayOffs.isEmpty && !fullLeave
+            let knownLeaveDuration = leave.allSatisfy {
+                $0.value.usedMinutes != nil || $0.value.allDay == true ||
+                    ($0.value.startTimestamp != nil && $0.value.endTimestampExclusive != nil)
             }
-            let isWorkday = isFlexWorkday && !isCustomHoliday
+            if !isWorkday {
+                requiredByDate[day.date] = 0
+            } else if knownLeaveDuration {
+                let leaveMinutes = try leave.reduce(0) { total, block in
+                    if let minutes = block.value.usedMinutes { return total + minutes }
+                    return total + Int(try interval(block).duration / 60)
+                }
+                requiredByDate[day.date] = max(0, attribute.usualWorkingMinutes - leaveMinutes)
+            }
             let plannedStart = try attribute.coreTime.map { try localTime($0.start, date: date, zone: zone) }
             let plannedEnd = try attribute.coreTime.map { range in
                 let end = try localTime(range.endInclusive, date: date, zone: zone)
@@ -346,13 +327,10 @@ enum FlexAttendance {
             }
             rows.append(row)
         }
-        let requiredDeduction = customHoliday?.affectsRequired == true ? customHolidayMinutes : 0
-        let maximumDeduction = customHoliday?.affectsMaximum == true ? customHolidayMinutes : 0
-        let compensationDeduction = customHoliday?.affectsCompensation == true ? customHolidayMinutes : 0
         var month = MonthlyReport(workedMinutes: result.totalRecognizedWorkingMinutes, outsideMinutes: 0,
-            requiredMinutes: max(0, result.requiredAgreedWorkingMinutes - requiredDeduction), vacationMinutes: 0, weekendMinutes: 0,
+            requiredMinutes: result.requiredAgreedWorkingMinutes, vacationMinutes: 0, weekendMinutes: 0,
             dailyRequiredMinutes: rule.baseAgreedDayWorkingMinutes, startDate: period.from, endDate: period.to,
-            maximumWorkMinutes: result.requiredMaxStatutoryWorkingMinutes.map { max(0, $0 - maximumDeduction) })
+            maximumWorkMinutes: result.requiredMaxStatutoryWorkingMinutes)
         month.targetCreditedMinutes = result.currentTargetWorkingMinutes
         var snapshot = AttendanceSnapshot(record: rows.first { $0.date == workDate }, month: month,
             remainingWorkDays: AttendanceSnapshot.remainingScheduledDays(in: rows, during: month, today: workDate, at: now),
@@ -370,16 +348,11 @@ enum FlexAttendance {
         snapshot.remindersAvailable = remindersAvailable
         snapshot.reminderExcludedIntervals = excluded
         snapshot.averageClockInMinute = AttendanceSnapshot.averageClockInMinute(in: rows, before: workDate, timeZone: zone)
-        snapshot.compensationEstimate = CompensationEstimate(month: month, days: rows, holidays: holidays,
-            extraMinutes: requiredDeduction - compensationDeduction)
+        snapshot.compensationEstimate = CompensationEstimate(month: month, days: rows, holidays: holidays)
         snapshot.calendarRecords = rows
         snapshot.calendarHolidays = holidays
+        snapshot.calendarRequiredMinutes = requiredByDate
         snapshot.expectedClockOut = try status.onTimeInfo?.clockOutOnTimeInfo?.clockOnTime.map(FlexDates.timestamp)
-        if customHoliday != nil {
-            snapshot.customHolidayDeduction = CustomHolidayDeduction(dates: customHolidayDates, minutes: customHolidayMinutes,
-                maximumMinutes: maximumDeduction, flexRequiredMinutes: result.requiredAgreedWorkingMinutes,
-                flexMaximumMinutes: result.requiredMaxStatutoryWorkingMinutes)
-        }
         return snapshot
     }
 }

@@ -30,8 +30,7 @@ struct FlexTests {
     static func decode<T: Decodable>(_ key: String, from data: [String: Any]) throws -> T {
         try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: data[key]!))
     }
-    static func snapshot(_ f: [String: Any], customHoliday: CustomHolidayRule? = nil,
-                         serverClockOffset: TimeInterval = 0) throws -> AttendanceSnapshot {
+    static func snapshot(_ f: [String: Any], serverClockOffset: TimeInterval = 0) throws -> AttendanceSnapshot {
         let period: FlexPeriodResponse = try decode("period", from: f)
         let rules: FlexRules = try decode("rules", from: f)
         let schedules: FlexSchedules = try decode("schedules", from: f)
@@ -39,7 +38,7 @@ struct FlexTests {
         return try FlexAttendance.snapshot(period: period.period, summary: decode("summary", from: f),
             today: decode("today", from: f), status: decode("status", from: f),
             schedules: schedules.dailySchedules, attributes: dates.workingDayAttributes, rule: rules.workRules[0],
-            customHoliday: customHoliday, serverClockOffset: serverClockOffset)
+            serverClockOffset: serverClockOffset)
     }
     static func cookie(_ name: String = "JSESSIONID", domain: String = "flex.team", path: String = "/") -> SavedCookie {
         SavedCookie(HTTPCookie(properties: [.name: name, .value: "test-session", .domain: domain, .path: path, .secure: "TRUE"])!)
@@ -53,7 +52,6 @@ struct FlexTests {
     }
     static func main() async throws {
         try attendanceChecks()
-        try customHolidayChecks()
         try await requestChecks()
         try await renewalChecks()
         try await fetchingChecks()
@@ -231,7 +229,7 @@ struct FlexTests {
         days[index]["timeBlocks"] = [["type": "TIME_OFF", "value": ["allDay": true]]]
         schedule["dailySchedules"] = days; leave["schedules"] = schedule
         let fullLeave = try snapshot(leave)
-        precondition(fullLeave.record?.isScheduledWorkday == false)
+        precondition(fullLeave.record?.isScheduledWorkday == false && fullLeave.calendarRequiredMinutes["2026-10-15"] == 0)
         precondition(fullLeave.clockInReminderDate(mode: .scheduled, delayMinutes: 0) == nil)
         days[index]["timeBlocks"] = [["type": "TIME_OFF", "value": ["allDay": false]]]
         schedule["dailySchedules"] = days; leave["schedules"] = schedule
@@ -241,54 +239,12 @@ struct FlexTests {
         schedule["dailySchedules"] = days; leave["schedules"] = schedule
         let partialLeave = try snapshot(leave)
         precondition(partialLeave.clockInReminderTime(mode: .scheduled, delayMinutes: 0) == "14:00")
+        precondition(partialLeave.calendarRequiredMinutes["2026-10-15"] == 240)
         var annual = f["historySchedule"] as! [String: Any]
         annual["date"] = "2026-10-15"
         days[index] = annual; schedule["dailySchedules"] = days; leave["schedules"] = schedule
         let flexibleHalfDay = try snapshot(leave)
         precondition(!flexibleHalfDay.remindersAvailable && flexibleHalfDay.dailyTargetMinutes == 240)
-    }
-    static func customHolidayChecks() throws {
-        let f = try fixture()
-        // 1st/3rd/5th Wednesday: 10-07 (already worked) and 10-21; October has no 5th Wednesday.
-        let wednesdays = try snapshot(f, customHoliday: CustomHolidayRule(weekday: 4, ordinals: [1, 3, 5]))
-        precondition(wednesdays.month.targetMinutes == 9600 - 960 && wednesdays.month.creditedMinutes == 3770)
-        precondition(wednesdays.month.maximumWorkMinutes == 13812 - 960)
-        let unpaid = try snapshot(f, customHoliday: CustomHolidayRule(weekday: 4, ordinals: [1, 3, 5], affectsCompensation: false))
-        precondition(unpaid.month.targetMinutes == 9600 - 960 && unpaid.compensationEstimate?.thresholdMinutes == 9600)
-        precondition(wednesdays.compensationEstimate?.thresholdMinutes == 9600 - 960)
-        let paidOnly = try snapshot(f, customHoliday: CustomHolidayRule(weekday: 4, ordinals: [1, 3, 5],
-            affectsRequired: false, affectsMaximum: false))
-        precondition(paidOnly.month.targetMinutes == 9600 && paidOnly.month.maximumWorkMinutes == 13812)
-        precondition(paidOnly.compensationEstimate?.thresholdMinutes == 9600 - 960)
-        precondition(paidOnly.customHolidayDeduction?.maximumMinutes == 0 && paidOnly.remainingWorkDays == 11)
-        let legacy = try JSONDecoder().decode(CustomHolidayRule.self, from: Data(#"{"weekday":4,"ordinals":[1]}"#.utf8))
-        precondition(legacy.affectsRequired && legacy.affectsMaximum && legacy.affectsCompensation)
-        let deduction = wednesdays.customHolidayDeduction!
-        precondition(deduction.dates == ["2026-10-07", "2026-10-21"] && deduction.minutes == 960)
-        let holidayRecord = wednesdays.calendarRecords.first { $0.date == "2026-10-07" }!
-        precondition(holidayRecord.totalMinutes == 587 && holidayRecord.isScheduledDayOff,
-                     "A custom holiday must retain completed work without becoming a scheduled workday")
-        precondition(wednesdays.calendarRecords.first { $0.date == "2026-10-05" }?.isScheduledDayOff == true)
-        precondition(wednesdays.calendarHolidays["2026-10-05"]?.name == "개천절 대체휴일")
-        precondition(deduction.flexRequiredMinutes == 9600 && deduction.flexMaximumMinutes == 13812)
-        let plain = try snapshot(f)
-        precondition(plain.customHolidayDeduction == nil)
-        precondition(wednesdays.remainingWorkDays == 11)
-        precondition(plain.expectedMinutesByNow == 4320 && wednesdays.expectedMinutesByNow == 3840)
-        let today = try snapshot(f, customHoliday: CustomHolidayRule(weekday: 5, ordinals: [3]))
-        precondition(today.record?.isScheduledWorkday == false && today.month.targetMinutes == 9600 - 480)
-        precondition(today.expectedMinutesByNow == 3840)
-        precondition(today.clockInReminderDate(mode: .scheduled, delayMinutes: 0) == nil)
-        var history = f
-        var historyDays = history["schedules"] as! [String: Any]
-        historyDays["dailySchedules"] = [f["historySchedule"]!] + (historyDays["dailySchedules"] as! [Any])
-        history["schedules"] = historyDays
-        var historyDates = history["attributes"] as! [String: Any]
-        historyDates["workingDayAttributes"] = [f["historyAttribute"]!] + (historyDates["workingDayAttributes"] as! [Any])
-        history["attributes"] = historyDates
-        // 09-04 is outside the period and 10-09 is already a flex holiday, so only 10-02 is deducted.
-        let fridays = try snapshot(history, customHoliday: CustomHolidayRule(weekday: 6, ordinals: [1, 2]))
-        precondition(fridays.month.targetMinutes == 9600 - 480)
     }
     static func requestChecks() async throws {
         FlexStubProtocol.requests = []
@@ -450,16 +406,6 @@ struct FlexTests {
         precondition(result.accountIdentifier == "company-1:user-1" && result.todayMinutes == 144)
         precondition(FlexStubProtocol.requests.count == 10)
         // Changing the custom holiday recomputes from the fetched data without waiting on rate-limited requests.
-        FlexStubProtocol.requests = []
-        let rebuilt = try fetcher.rebuild(customHoliday: CustomHolidayRule(weekday: 4, ordinals: [1, 3, 5]))!
-        precondition(FlexStubProtocol.requests.isEmpty && rebuilt.accountIdentifier == result.accountIdentifier)
-        precondition(rebuilt.customHolidayDeduction?.dates == ["2026-10-07", "2026-10-21"])
-        precondition(rebuilt.month.targetMinutes == result.month.targetMinutes - 960)
-        let cleared = try fetcher.rebuild(customHoliday: nil)
-        precondition(cleared?.month.targetMinutes == result.month.targetMinutes && cleared?.customHolidayDeduction == nil)
-        fetcher.restore([cookie()])
-        let forgotten = try fetcher.rebuild(customHoliday: nil)
-        precondition(forgotten == nil)
         FlexStubProtocol.requests = []
         let withHistory = try await client().snapshot(includePreviousPeriod: true)
         precondition(withHistory.month.actualMinutes == 4200 && withHistory.averageClockInMinute != nil)

@@ -7,13 +7,13 @@ struct OnboardingWindow: View {
     @State private var loginAttempt = 0
     @State private var loginPageState = LoginWebView.LoadState.loading
 
-    private let titles = ["근태 확인, 메뉴 막대에서", "원티드스페이스에 로그인", "이번 달 근무 흐름을 한눈에", "추가 수당 시작 기준선", "정기 휴무 설정", "출근 기록을 잊지 않도록"]
+    private let titles = ["근태 확인, 메뉴 막대에서", "원티드스페이스에 로그인", "이번 달 근무 흐름을 한눈에", "추가 수당 시작 기준선", "달력에서 휴가 설정", "출근 기록을 잊지 않도록"]
     private let descriptions = [
         "화면 위쪽의 아이콘을 좌클릭하거나 우클릭하면 근무시간을 볼 수 있어요. 패널 상단의 톱니바퀴를 누르면 옵션 창이 열려요.",
         "아래에서 평소 사용하던 계정으로 로그인해주세요. 로그인은 나중에 하고 기능부터 둘러볼 수도 있어요.",
         "월간 막대는 최대 근무 가능 시간까지 펼쳐져요. 세 가지 색의 선과 아래 설명으로 각 기준을 확인해요.",
         "월간 막대의 보라색 선은 필수시간을 채운 뒤 리프레시 데이를 반영한 수당 기준이에요. 실제 수당은 신청·승인과 급여 정산에 따라 달라져요.",
-        "flex에 없는 정기 휴무(예: 매달 1·3번째 수요일)를 지정하면 근무일에서 빼고, 체크한 기준에서 그날 시간만큼 차감해요. 옵션 창에서도 바꿀 수 있어요.",
+        "달력에서 날짜를 누른 뒤 유급·무급 휴가를 선택하세요. 두 휴가 모두 근무일과 필수·최대시간에서 빠지고, 유급 휴가만 수당 기준도 낮춰요. 회사 시스템에 휴가를 신청하지는 않아요.",
         "출근 기록이 없으면 알려드려요. 패널 상단의 톱니바퀴로 옵션 창을 열어 알림을 켜고 끄거나 기준과 지연 시간을 바꿀 수 있어요."
     ]
     private let symbols = ["menubar.rectangle", "person.crop.circle", "chart.bar.xaxis", "calendar.badge.clock", "calendar.badge.minus", "bell.badge"]
@@ -223,13 +223,11 @@ struct OnboardingWindow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case 4:
-            if model.selectedService == .flex {
-                CustomHolidaySettings(model: model)
-            } else {
-                Text("정기 휴무 설정은 flex 연결 시 사용할 수 있어요.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
+            Label("달력에서 날짜 선택", systemImage: "calendar")
+            Label("휴가 없음 · 유급 휴가 · 무급 휴가", systemImage: "checkmark.circle")
+            Divider()
+            Text("선택은 이 Mac에 저장되며 근태 서비스·계정별로 구분해요. ‘휴가 없음’을 선택하면 앱에서 지정한 휴가만 해제돼요.")
+                .font(.callout)
         default:
             Label("근무표 시작 또는 최근 출근 평균을 기준으로", systemImage: "clock")
             Label("기준 시각에서 0~240분 뒤에 알림", systemImage: "timer")

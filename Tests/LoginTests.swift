@@ -363,7 +363,7 @@ struct LoginTests {
         fresh.advanceLiveTime(to: now)
         var loads = 0
         var fail = false
-        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in
+        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _ in
                 loads += 1
                 if fail { throw URLError(.notConnectedToInternet) }
                 return fresh
@@ -425,7 +425,7 @@ struct LoginTests {
         snapshot.service = .flex
         var loads = 0
         let backend = FlexBackend(vault: vault, client: client, webDataStore: webData,
-            snapshotLoader: { _, _ in
+            snapshotLoader: { _ in
                 loads += 1
                 guard client.currentCookies().contains(where: { $0.name == "AID" && $0.value == "signed-in" }) else {
                     throw FlexError.authentication
@@ -480,7 +480,7 @@ struct LoginTests {
         var snapshot = AttendanceSnapshot(record: nil, month: month, remainingWorkDays: 1, updatedAt: Date())
         snapshot.service = .flex
         let backend = FlexBackend(vault: vault, webDataStore: webData,
-                                  snapshotLoader: { _, _ in snapshot })
+                                  snapshotLoader: { _ in snapshot })
         let model = WorkBarModel(flex: backend, defaults: defaults, service: .flex)
         let signedInSession = model.loginWebDataStore
         precondition(signedInSession === webData)
@@ -511,7 +511,7 @@ struct LoginTests {
         await model.acceptCookies([cookie])
         precondition(model.loginCompleted && model.hasSavedSession)
         precondition(model.loginWebDataStore === nextSession)
-        let relaunched = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }),
+        let relaunched = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _ in snapshot }),
                                       defaults: defaults, service: .flex)
         precondition(!relaunched.loginWebDataStore.isPersistent && relaunched.hasSavedSession)
         precondition(relaunched.loginCookies.contains { $0.name == cookie.name })
@@ -556,7 +556,7 @@ struct LoginTests {
             wantedSpace: WantedSpaceBackend(vault: vault, client: AttendanceClient(cookies: storage),
                 webDataStore: webData,
                 snapshotLoader: { _ in wanted }, sessionSaver: { _ in wantedSaves += 1 }),
-            flex: FlexBackend(vault: flexVault, webDataStore: webData, snapshotLoader: { _, _ in
+            flex: FlexBackend(vault: flexVault, webDataStore: webData, snapshotLoader: { _ in
                 if let error { throw error }
                 if hold { return await withCheckedContinuation { pending = $0 } }
                 return flex
@@ -642,7 +642,7 @@ struct LoginTests {
             startDate: "2026-10-01", endDate: "2026-10-31", maximumWorkMinutes: nil)
         var snapshot = AttendanceSnapshot(record: nil, month: month, remainingWorkDays: 1, updatedAt: Date())
         snapshot.service = .flex
-        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _, _ in snapshot }),
+        let model = WorkBarModel(flex: FlexBackend(vault: vault, snapshotLoader: { _ in snapshot }),
             defaults: defaults, service: .flex)
         let refreshed = await model.refresh()
         precondition(refreshed && model.snapshot?.service == .flex && model.loginCompleted)

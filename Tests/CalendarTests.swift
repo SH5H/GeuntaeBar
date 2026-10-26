@@ -34,6 +34,7 @@ struct CalendarTests {
         precondition(model.snapshot?.month.targetMinutes == 9120)
         precondition(model.snapshot?.compensationEstimate?.thresholdMinutes == 9120)
         precondition(model.snapshot?.remainingWorkDaysAfterToday == 3)
+        precondition(model.snapshot?.remainingRequiredWorkDays == 4 && model.snapshot?.dailyRequiredHours == 8)
         model.setLeave(.unpaid, on: "2026-10-28")
         precondition(model.snapshot?.month.targetMinutes == 9120)
         precondition(model.snapshot?.compensationEstimate?.thresholdMinutes == 9600)

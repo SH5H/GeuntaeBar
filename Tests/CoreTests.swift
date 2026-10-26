@@ -279,19 +279,25 @@ struct CoreTests {
         precondition(noDays.expectedMinutesByNow == minimumMonth.targetMinutes)
         let unevenSnapshot = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
                                                 remainingWorkDays: 2, updatedAt: morning)
-        precondition(unevenSnapshot.remainingWorkDaysAfterToday == 1)
-        precondition(unevenSnapshot.dailyRequiredHours == 721.0 / 60)
+        precondition(unevenSnapshot.remainingRequiredWorkDays == 2)
+        precondition(unevenSnapshot.dailyRequiredHours == 721.0 / 2 / 60)
         precondition(noDays.remainingWorkDaysAfterToday == 0 && noDays.dailyRequiredHours == nil)
         precondition(achieved.dailyRequiredHours == 0)
-        for (day, remainingDays, time) in [(minimumDay, 2, morning), (minimumDay, 1, evening),
-                                          (endedDay, 1, morning), (offDay, 1, morning)] {
+        for (day, remainingDays, time, expectedDays) in [
+            (minimumDay, 2, morning, 2), (minimumDay, 1, evening, 2),
+            (missedClockIn, 2, morning, 2), (endedDay, 1, morning, 1), (offDay, 1, morning, 1)
+        ] {
             let future = AttendanceSnapshot(record: day, month: minimumMonth,
                                             remainingWorkDays: remainingDays, updatedAt: time)
-            precondition(future.remainingWorkDaysAfterToday == 1 && future.dailyRequiredHours == 12)
+            precondition(future.remainingRequiredWorkDays == expectedDays)
+            precondition(future.dailyRequiredHours == 12.0 / Double(expectedDays))
         }
         let lastDay = AttendanceSnapshot(record: minimumDay, month: minimumMonth,
                                           remainingWorkDays: 1, updatedAt: morning)
-        precondition(lastDay.remainingWorkDaysAfterToday == 0 && lastDay.dailyRequiredHours == nil)
+        precondition(lastDay.remainingRequiredWorkDays == 1 && lastDay.dailyRequiredHours == 12)
+        let lastDayEnded = AttendanceSnapshot(record: endedDay, month: minimumMonth,
+                                             remainingWorkDays: 0, updatedAt: evening)
+        precondition(lastDayEnded.remainingRequiredWorkDays == 0 && lastDayEnded.dailyRequiredHours == nil)
         var unknown = minimumSnapshot
         unknown.attendanceKnown = false
         precondition(unknown.dailyRequiredHours == nil)

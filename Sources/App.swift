@@ -1486,7 +1486,7 @@ struct MonthSummary: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("남은 근무일").font(.caption).foregroundStyle(.secondary)
-                    Text("\(snapshot.remainingWorkDaysAfterToday)일")
+                    Text("\(snapshot.remainingRequiredWorkDays)일")
                         .font(.headline).monospacedDigit()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1499,7 +1499,7 @@ struct MonthSummary: View {
             }
             .padding(10)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            Text("오늘 제외 · 남은 필수시간 기준")
+            Text("퇴근 전 오늘 포함 · 남은 필수시간 기준")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             WorkProgressBar(fill: meter.fillFraction, markers: markers,

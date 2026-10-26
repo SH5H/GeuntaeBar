@@ -495,8 +495,15 @@ struct AttendanceSnapshot {
     var remainingWorkDaysAfterToday: Int {
         max(0, remainingDaysIncludingToday - (record?.isScheduledWorkday == true ? 1 : 0))
     }
+    var remainingRequiredWorkDays: Int {
+        guard let record, record.isScheduledWorkday, record.end?.isEmpty != false,
+              record.date >= month.startDate, record.date <= month.endDate else {
+            return remainingWorkDaysAfterToday
+        }
+        return remainingWorkDaysAfterToday + 1
+    }
     var dailyRequiredHours: Double? {
-        let days = remainingWorkDaysAfterToday
+        let days = remainingRequiredWorkDays
         guard attendanceKnown, days > 0 else { return nil }
         return Double(displayMonth.remainingMinutes) / Double(days) / 60
     }

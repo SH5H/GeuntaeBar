@@ -82,7 +82,7 @@ struct FlexTests {
         precondition(live.displayMonth.actualMinutes == 4344 && live.displayMonth.creditedMinutes == 3914)
         precondition(live.displayMonth.remainingMinutes == 5686 && live.displayCompensationEstimate?.remainingMinutes == 5686)
         precondition(live.remainingWorkDaysAfterToday == 11)
-        precondition(live.dailyRequiredHours == 5686.0 / 11 / 60)
+        precondition(live.remainingRequiredWorkDays == 12 && live.dailyRequiredHours == 5686.0 / 12 / 60)
         var partlyFinalized = live
         partlyFinalized.liveWorkClock = LiveWorkClock(start: live.liveWorkClock!.start.addingTimeInterval(3600),
             completedMinutes: 60, rests: live.liveWorkClock!.rests, countsTowardTarget: true)
@@ -108,7 +108,7 @@ struct FlexTests {
         precondition(ticking.updatedAt == live.updatedAt && ticking.month.actualMinutes == 4200)
         precondition(ticking.month.creditedMinutes == 3770 && ticking.minimumTodayMeter?.targetMinutes == 486)
         precondition(ticking.displayMonth.actualMinutes == 4345 && ticking.monthMeter.actualMinutes == 3915)
-        precondition(ticking.dailyRequiredHours == 5685.0 / 11 / 60)
+        precondition(ticking.dailyRequiredHours == 5685.0 / 12 / 60)
         ticking.advanceLiveTime(to: try FlexDates.parse("2026-10-15T13:30:00"))
         precondition(ticking.todayMinutes == resting.todayMinutes && ticking.attendanceNote == resting.attendanceNote)
         ticking.advanceLiveTime(to: try FlexDates.parse("2026-10-15T13:59:59"))

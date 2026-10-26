@@ -285,7 +285,7 @@ struct MenuTests {
         let working = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 240, holidayStatus: workday)
         let (_, decimalTexts) = try await render(working, required: 7610, name: "daily-required")
-        precondition(decimalTexts.joined().contains("3.4시간"), decimalTexts.joined())
+        precondition(decimalTexts.joined().contains("3시간25분"), decimalTexts.joined())
         let (_, texts) = try await render(working, name: "working")
         precondition(texts.joined().contains("50%달성"))
         precondition(texts.joined().contains("기준8시간0분"))

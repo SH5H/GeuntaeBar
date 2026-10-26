@@ -69,7 +69,7 @@ struct FlexViewTests {
         let menuText = try render(WorkMenu(model: model), "menu", width: 728, height: 680)
         precondition(menuText.contains("근무중") && !menuText.contains("서버기록기준") && !menuText.contains("추정"), menuText)
         precondition(menuText.contains("누적75시간0분"), menuText)
-        precondition(menuText.contains("15일") && menuText.contains("6.1시간") && menuText.contains("63%달성"), menuText)
+        precondition(menuText.contains("15일") && menuText.contains("6시간9분") && menuText.contains("63%달성"), menuText)
         precondition(menuText.contains("92시간10분") && menuText.contains("230시간12분"), menuText)
         model.advanceLiveTime(to: now.addingTimeInterval(60))
         let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 728, height: 680)

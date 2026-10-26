@@ -1491,7 +1491,7 @@ struct MonthSummary: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("하루 필요").font(.caption).foregroundStyle(.secondary)
-                    Text(snapshot.dailyRequiredHours.map { String(format: "%.1f시간", $0) } ?? "—")
+                    Text(snapshot.dailyRequiredHours.map { AttendanceSnapshot.duration(Int(ceil($0 * 60))) } ?? "—")
                         .font(.headline).monospacedDigit()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

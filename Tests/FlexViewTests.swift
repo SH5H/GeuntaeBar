@@ -66,14 +66,15 @@ struct FlexViewTests {
         model.beginSignIn()
         await model.acceptCookies([cookie])
         precondition(model.loginCompleted)
-        let menuText = try render(WorkMenu(model: model), "menu", width: 728, height: 680)
+        let menuText = try render(WorkMenu(model: model), "menu", width: 728, height: 650)
         precondition(menuText.contains("근무중") && !menuText.contains("서버기록기준") && !menuText.contains("추정"), menuText)
-        precondition(menuText.contains("누적75시간0분"), menuText)
+        precondition(menuText.contains("75시간0분"), menuText)
         precondition(menuText.contains("15일") && menuText.contains("6시간9분") && menuText.contains("63%달성"), menuText)
-        precondition(menuText.contains("92시간10분") && menuText.contains("230시간12분"), menuText)
+        precondition(menuText.contains("계산기준상세") && !menuText.contains("92시간10분") &&
+                     !menuText.contains("230시간12분"), menuText)
         model.advanceLiveTime(to: now.addingTimeInterval(60))
-        let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 728, height: 680)
-        precondition(nextMinute.contains("누적75시간1분") && nextMinute.contains("92시간9분"), nextMinute)
+        let nextMinute = try render(WorkMenu(model: model), "menu-next-minute", width: 728, height: 650)
+        precondition(nextMinute.contains("75시간1분") && nextMinute.contains("계산기준상세"), nextMinute)
         let updater = AppUpdater(appURL: output.appendingPathComponent("missing.app"), defaults: defaults,
                                  logURL: output.appendingPathComponent("update.log"))
         let optionsText = try render(WorkOptionsWindow(model: model, onboarding: OnboardingState(defaults: defaults), updater: updater),

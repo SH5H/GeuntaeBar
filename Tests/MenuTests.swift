@@ -65,7 +65,7 @@ struct MenuTests {
                 }
                 for x in orange {
                     let c = color(x)
-                    precondition(c.redComponent > 0.9 && c.greenComponent > 0.3 && c.blueComponent < 0.25 && c.alphaComponent > 0.9)
+                    precondition(c.redComponent > 0.9 && c.greenComponent > 0.6 && c.blueComponent < 0.4 && c.alphaComponent > 0.9)
                 }
                 for x in background { precondition(color(x).alphaComponent < 0.3) }
                 try bitmap.representation(using: .png, properties: [:])!
@@ -291,7 +291,7 @@ struct MenuTests {
         precondition(texts.joined().contains("기준8시간0분"))
         precondition(texts.joined().contains("예상퇴근18:00"))
         precondition(texts.joined().contains("필수시간대비94%"))
-        precondition(texts.joined().contains("최대160시간0분"))
+        precondition(texts.joined().contains("계산기준상세") && !texts.joined().contains("최대160시간0분"))
         let overtime = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 600, holidayStatus: workday)
         let overtimeMonth = MonthlyReport(workedMinutes: 6960 + 600, outsideMinutes: 0,
@@ -335,14 +335,16 @@ struct MenuTests {
         }
         let (remainingImage, _) = try await render(before, required: 7710, name: "before-remaining")
         let remainingText = try calendarText(remainingImage)
-        precondition(remainingText.range(of: #"-\d+:\d{2}"#, options: .regularExpression) != nil, remainingText)
+        precondition(remainingText.contains("-6:15"), remainingText)
+        let (fractionalImage, _) = try await render(before, days: 1, required: 7014, name: "fractional-daily-requirement")
+        let fractionalText = try calendarText(fractionalImage)
+        precondition(fractionalText.contains("-0:54"), fractionalText)
         let (achievedImage, _) = try await render(before, required: 6900, name: "before-achieved")
         let achievedText = try calendarText(achievedImage)
         precondition(achievedText.contains("달성"), achievedText)
         let (unknownImage, unknownTexts) = try await render(before, required: 7710, attendanceKnown: false, name: "unknown-attendance")
         let unknownText = try calendarText(unknownImage)
-        precondition(unknownText.range(of: #"-\d+:\d{2}"#, options: .regularExpression) == nil &&
-                     !unknownText.contains("달성"), unknownText)
+        precondition(unknownText.range(of: #"-\d+:\d{2}"#, options: .regularExpression) == nil, unknownText)
         precondition(!unknownTexts.joined().contains("%달성"))
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)
@@ -358,7 +360,7 @@ struct MenuTests {
                                           startDate: "2026-09-01", endDate: "2026-09-30",
                                           maximumWorkMinutes: 9600)
         let (_, overnightTexts) = try await render(overnight, days: 0, report: previousMonth, name: "overnight")
-        precondition(overnightTexts.joined().contains("2026-09-30까지기준132시간0분"))
+        precondition(overnightTexts.joined().contains("계산기준상세"))
         precondition(overnightTexts.joined().contains("113%달성"))
 
         // Calendar boundaries must remain correct across leap years, six-row months and time zones.

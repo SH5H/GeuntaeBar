@@ -1111,67 +1111,146 @@ struct WorkOptionsWindow: View {
     }
 }
 
+private enum MenuPalette {
+    static let teal = Color(red: 39 / 255, green: 157 / 255, blue: 155 / 255)
+    static let amber = Color(red: 244 / 255, green: 181 / 255, blue: 68 / 255)
+    static let coral = Color(red: 232 / 255, green: 138 / 255, blue: 127 / 255)
+    static func tealSoft(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.16, green: 0.31, blue: 0.29)
+                       : Color(red: 232 / 255, green: 245 / 255, blue: 242 / 255)
+    }
+    static func amberSoft(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.34, green: 0.28, blue: 0.17)
+                       : Color(red: 1, green: 243 / 255, blue: 219 / 255)
+    }
+    static func coralSoft(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.34, green: 0.22, blue: 0.2)
+                       : Color(red: 1, green: 240 / 255, blue: 237 / 255)
+    }
+    static func leaveSoft(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.23, green: 0.26, blue: 0.35)
+                       : Color(red: 0.91, green: 0.94, blue: 0.99)
+    }
+
+    static func canvas(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 37 / 255, green: 36 / 255, blue: 34 / 255)
+                       : Color(red: 250 / 255, green: 248 / 255, blue: 245 / 255)
+    }
+    static func card(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 50 / 255, green: 49 / 255, blue: 47 / 255) : .white
+    }
+    static func warmCard(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 61 / 255, green: 55 / 255, blue: 43 / 255)
+                       : Color(red: 1, green: 0.97, blue: 0.91)
+    }
+    static func text(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.94, green: 0.92, blue: 0.89)
+                       : Color(red: 34 / 255, green: 37 / 255, blue: 43 / 255)
+    }
+    static func secondary(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.7, green: 0.68, blue: 0.64)
+                       : Color(red: 133 / 255, green: 129 / 255, blue: 125 / 255)
+    }
+    static func border(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color.white.opacity(0.1)
+                       : Color(red: 237 / 255, green: 233 / 255, blue: 227 / 255)
+    }
+}
+
+private struct MenuCard: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    var warm = false
+    var padding: CGFloat = 16
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(warm ? MenuPalette.warmCard(colorScheme) : MenuPalette.card(colorScheme),
+                        in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(MenuPalette.border(colorScheme), lineWidth: differentiateWithoutColor ? 1.5 : 0.7)
+            }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.035), radius: 8, y: 2)
+    }
+}
+
+private extension View {
+    func menuCard(warm: Bool = false, padding: CGFloat = 16) -> some View {
+        modifier(MenuCard(warm: warm, padding: padding))
+    }
+}
+
 struct WorkMenu: View {
     @ObservedObject var model: WorkBarModel
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(systemName: "calendar")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(WorkProgressBar.confirmedColor)
-                Text("근무 캘린더").font(.headline)
+                    .foregroundStyle(MenuPalette.teal)
+                Text("근무 캘린더").font(.headline.weight(.semibold))
                 Text(model.selectedService == .flex ? "flex" : "원티드스페이스")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(MenuPalette.secondary(colorScheme))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(MenuPalette.card(colorScheme), in: Capsule())
+                Spacer(minLength: 4)
                 if let snapshot = model.snapshot {
                     Text("\(snapshot.updatedAt, style: .time) 갱신")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).monospacedDigit()
+                        .foregroundStyle(MenuPalette.secondary(colorScheme))
+                        .lineLimit(1)
                 }
                 Button {
                     openWindow(id: "options")
                     NSApplication.shared.activate(ignoringOtherApps: true)
                 } label: {
                     Image(systemName: "gearshape")
-                        .frame(width: 28, height: 28)
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 32, height: 32)
+                        .background(MenuPalette.card(colorScheme), in: RoundedRectangle(cornerRadius: 11))
                 }
                 .buttonStyle(.plain)
                 .help("옵션")
                 .accessibilityLabel("옵션 열기")
             }
+            .frame(height: 36)
             if let snapshot = model.snapshot {
-                HStack(alignment: .top, spacing: 20) {
+                HStack(alignment: .top, spacing: 12) {
                     AttendanceCalendarView(snapshot: snapshot, canEditLeave: model.loginCompleted, setLeave: model.setLeave)
                         .id("\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)-\(snapshot.month.startDate)-\(snapshot.record?.date ?? "")")
-                        .frame(width: 350, height: 540, alignment: .top)
+                        .frame(width: 350, height: 528, alignment: .top)
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            TodaySummary(snapshot: snapshot)
-                            Divider()
-                            MonthSummary(snapshot: snapshot)
+                        VStack(alignment: .leading, spacing: 12) {
+                            TodaySummary(snapshot: snapshot).menuCard(warm: true)
+                            MonthSummary(snapshot: snapshot).menuCard()
+                            CalculationDetails(snapshot: snapshot).menuCard(padding: 14)
                         }
-                        .padding(16)
                     }
-                    .frame(width: 318, height: 540)
-                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
+                    .scrollIndicators(.visible)
+                    .frame(width: 334, height: 528)
                 }
             } else {
                 Label(model.message, systemImage: "calendar.badge.exclamationmark")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(MenuPalette.secondary(colorScheme))
                     .padding(.vertical, 24)
             }
             if model.snapshot != nil && model.message != "방금 업데이트됨" {
                 Text(model.message)
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(MenuPalette.secondary(colorScheme))
                     .lineLimit(2)
             }
         }
-        .padding(20)
+        .foregroundStyle(MenuPalette.text(colorScheme))
+        .padding(16)
         .frame(width: model.snapshot == nil ? 400 : 728,
-               height: model.snapshot == nil ? nil : 660, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
+               height: model.snapshot == nil ? nil : 650, alignment: .topLeading)
+        .background(MenuPalette.canvas(colorScheme))
     }
 }
 
@@ -1267,71 +1346,101 @@ struct AttendanceCalendarView: View {
     let setLeave: (LeaveOptions?, String) -> Void
     @State private var displayedMonth: Date?
     @State private var selectedDate: Date?
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
 
     var body: some View {
         let month = AttendanceCalendarMonth(snapshot: snapshot, displaying: displayedMonth)
         let selection = selectedDate ?? month.referenceDate
         let selectedKey = month.key(selection)
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Text(month.title).font(.system(size: 24, weight: .bold, design: .rounded))
-                Spacer()
-                Button("오늘") {
-                    displayedMonth = snapshot.updatedAt
-                    selectedDate = snapshot.updatedAt
-                }
-                .buttonStyle(.plain)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(.quaternary, in: Capsule())
-                ForEach([-1, 1], id: \.self) { offset in
-                    Button {
-                        if let date = month.adjacentMonth(offset) {
-                            displayedMonth = date
-                            selectedDate = date
-                        }
-                    } label: {
-                        Image(systemName: offset < 0 ? "chevron.left" : "chevron.right")
-                            .font(.caption.weight(.semibold)).frame(width: 20, height: 28)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(month.adjacentMonth(offset) == nil)
-                    .accessibilityLabel(offset < 0 ? "이전 달" : "다음 달")
-                }
-            }
-            Text("조회 기간 \(snapshot.month.startDate) – \(snapshot.month.endDate)")
-                .font(.caption2).foregroundStyle(.secondary)
-            VStack(spacing: 6) {
-                HStack(spacing: 4) {
-                    ForEach(Array(["일", "월", "화", "수", "목", "금", "토"].enumerated()), id: \.offset) { index, day in
-                        Text(day).font(.caption.weight(.medium))
-                            .foregroundStyle(index == 0 ? Color.red : .secondary)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                Grid(horizontalSpacing: 4, verticalSpacing: 4) {
-                    ForEach(0..<(month.days.count / 7), id: \.self) { week in
-                        GridRow {
-                            ForEach(0..<7, id: \.self) { weekday in
-                                if let date = month.days[week * 7 + weekday] {
-                                    dayCell(date, month: month, selectedKey: selectedKey)
+        VStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 7) {
+                    Text(month.title)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                    Spacer(minLength: 0)
+                    ForEach([-1, 0, 1], id: \.self) { offset in
+                        Button {
+                            if offset == 0 {
+                                displayedMonth = snapshot.updatedAt
+                                selectedDate = snapshot.updatedAt
+                            } else if let date = month.adjacentMonth(offset) {
+                                displayedMonth = date
+                                selectedDate = date
+                            }
+                        } label: {
+                            Group {
+                                if offset == 0 {
+                                    Text("오늘").font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 10)
                                 } else {
-                                    Color.clear.frame(height: 38)
-                                        .accessibilityHidden(true)
+                                    Image(systemName: offset < 0 ? "chevron.left" : "chevron.right")
+                                        .font(.caption.weight(.semibold)).frame(width: 28)
+                                }
+                            }
+                            .frame(height: 28)
+                            .background(MenuPalette.canvas(colorScheme), in: RoundedRectangle(cornerRadius: 9))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(offset != 0 && month.adjacentMonth(offset) == nil)
+                        .opacity(offset != 0 && month.adjacentMonth(offset) == nil ? 0.4 : 1)
+                        .accessibilityLabel(offset == 0 ? "오늘" : offset < 0 ? "이전 달" : "다음 달")
+                    }
+                }
+                Text("조회 기간 \(snapshot.month.startDate) – \(snapshot.month.endDate)")
+                    .font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                VStack(spacing: 3) {
+                    HStack(spacing: 3) {
+                        ForEach(Array(["일", "월", "화", "수", "목", "금", "토"].enumerated()), id: \.offset) { index, day in
+                            Text(day).font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(index == 0 ? MenuPalette.coral : MenuPalette.secondary(colorScheme))
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    Grid(horizontalSpacing: 3, verticalSpacing: 2) {
+                        ForEach(0..<(month.days.count / 7), id: \.self) { week in
+                            GridRow {
+                                ForEach(0..<7, id: \.self) { weekday in
+                                    if let date = month.days[week * 7 + weekday] {
+                                        dayCell(date, month: month, selectedKey: selectedKey)
+                                    } else {
+                                        Color.clear.frame(height: 35).accessibilityHidden(true)
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                HStack(spacing: 0) {
+                    legend("근무", color: MenuPalette.teal)
+                    Spacer(minLength: 2)
+                    legend("진행 중", color: MenuPalette.amber)
+                    Spacer(minLength: 2)
+                    legend("휴무", color: MenuPalette.coral)
+                    Spacer(minLength: 2)
+                    legend("휴가", color: Color(red: 0.49, green: 0.58, blue: 0.81))
+                    Spacer(minLength: 2)
+                    legend("달성", color: MenuPalette.secondary(colorScheme))
+                }
+                .padding(.top, 1)
             }
-            HStack(spacing: 14) {
-                Label("근무", systemImage: "circle.fill").foregroundStyle(WorkProgressBar.confirmedColor)
-                Label("진행 중", systemImage: "circle.fill").foregroundStyle(.orange)
-            }
-            .font(.system(size: 10))
-            Divider()
+            .menuCard(padding: 12)
+            .frame(height: 338)
             selectedDay(CalendarDayDetail(snapshot: snapshot, key: selectedKey), date: selection, month: month)
+                .menuCard(padding: 12)
+                .frame(height: 180)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func legend(_ title: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 7, height: 7)
+                .overlay(Circle().strokeBorder(differentiateWithoutColor ? MenuPalette.text(colorScheme) : .clear, lineWidth: 1))
+            Text(title).font(.system(size: 9)).foregroundStyle(MenuPalette.secondary(colorScheme))
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func dayCell(_ date: Date, month: AttendanceCalendarMonth, selectedKey: String) -> some View {
@@ -1339,86 +1448,138 @@ struct AttendanceCalendarView: View {
         let detail = CalendarDayDetail(snapshot: snapshot, key: key)
         let selected = key == selectedKey
         let today = month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt)
-        let color = detail.record?.isWorking == true ? Color.orange : WorkProgressBar.confirmedColor
+        let working = detail.record?.isWorking == true
+        let leave = snapshot.leaveByDate[key] != nil
+        let off = detail.record?.isScheduledDayOff == true || (detail.holiday != nil && !leave)
         let remaining = detail.remainingRequiredMinutes
         let requirement = remaining.map {
             $0 > 0
-                ? "하루 평균 \(AttendanceSnapshot.duration($0)) 필요 · 남은 월 필수시간을 남은 근무일로 나눈 값"
+                ? "하루 평균 \(AttendanceSnapshot.duration($0)) 필요"
                 : "현재 \(snapshot.monthTitle) 필수근무 달성"
         }
+        let value: String
+        if let minutes = detail.minutes {
+            let time = String(format: "%d:%02d", minutes / 60, minutes % 60)
+            value = working ? "중 \(time)" : time
+        } else if leave {
+            value = "휴가"
+        } else if let remaining {
+            value = remaining > 0
+                ? String(format: "-%d:%02d", remaining / 60, remaining % 60)
+                : "달성"
+        } else if off || detail.holiday != nil {
+            value = "휴무"
+        } else {
+            value = "—"
+        }
+        let fill = selected ? MenuPalette.teal
+            : working ? MenuPalette.amberSoft(colorScheme)
+            : leave ? MenuPalette.leaveSoft(colorScheme)
+            : off ? MenuPalette.coralSoft(colorScheme)
+            : detail.minutes != nil ? MenuPalette.tealSoft(colorScheme)
+            : remaining == 0 ? MenuPalette.tealSoft(colorScheme)
+            : Color.clear
         return Button { selectedDate = date } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Text("\(month.calendar.component(.day, from: date))")
                     .font(.system(size: 13, weight: selected || today ? .bold : .medium, design: .rounded))
-                    .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
-                Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
-                     ?? snapshot.leaveByDate[key].map { _ in "휴가" }
-                     ?? remaining.map { $0 > 0 ? String(format: "-%d:%02d", $0 / 60, $0 % 60) : "달성" }
-                     ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
-                    .font(.system(size: 9, weight: .medium)).monospacedDigit()
-                    .lineLimit(1).minimumScaleFactor(0.75)
-                    .foregroundStyle(selected ? Color.white.opacity(0.9) : detail.minutes != nil ? color : .secondary)
+                    .foregroundStyle(selected ? .white : off ? MenuPalette.coral : MenuPalette.text(colorScheme))
+                Text(value)
+                    .font(.system(size: 8.5, weight: .medium)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.65)
+                    .foregroundStyle(selected ? Color.white.opacity(0.95)
+                        : working ? MenuPalette.amber
+                        : leave ? Color(red: 0.49, green: 0.58, blue: 0.81)
+                        : off ? MenuPalette.coral
+                        : detail.minutes != nil || remaining == 0 ? MenuPalette.teal
+                        : MenuPalette.secondary(colorScheme))
             }
-            .frame(maxWidth: .infinity).frame(height: 38)
-            .background(selected ? WorkProgressBar.confirmedColor : detail.minutes != nil ? color.opacity(0.09) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 10))
+            .frame(maxWidth: .infinity).frame(height: 35)
+            .background(fill, in: RoundedRectangle(cornerRadius: 11))
             .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(today ? WorkProgressBar.confirmedColor : .clear, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(today ? MenuPalette.amber
+                        : selected && differentiateWithoutColor ? MenuPalette.text(colorScheme)
+                        : selected ? MenuPalette.teal : .clear,
+                        lineWidth: today || differentiateWithoutColor ? 1.5 : 0)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(key), \(detail.status)")
-        .accessibilityValue(requirement ?? detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
+        .accessibilityValue(requirement ?? detail.minutes.map(AttendanceSnapshot.duration) ?? value)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help("\(key) · \(requirement ?? detail.status)")
     }
 
     private func selectedDay(_ detail: CalendarDayDetail, date: Date, month: AttendanceCalendarMonth) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        let isToday = month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt)
+        let editable = canEditLeave && detail.key >= snapshot.month.startDate &&
+            detail.key <= snapshot.month.endDate &&
+            snapshot.calendarRecords.contains { $0.date == detail.key }
+        let clockText = detail.record.map { record in
+            detail.key == snapshot.record?.date ? snapshot.attendanceDescription :
+                "출근 \(AttendanceSnapshot.clock(record.start)) · 퇴근 \(AttendanceSnapshot.clock(record.end))"
+        } ?? "출근 --:-- · 퇴근 --:--"
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
                 Text("\(month.calendar.component(.month, from: date))월 \(month.calendar.component(.day, from: date))일")
-                    .font(.headline)
-                if month.calendar.isDate(date, inSameDayAs: snapshot.updatedAt) {
-                    Text("오늘").font(.caption).foregroundStyle(WorkProgressBar.confirmedColor)
+                    .font(.system(size: 15, weight: .semibold))
+                if isToday {
+                    Text("오늘")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MenuPalette.teal)
                 }
-                Spacer()
-                Text(detail.status).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    .lineLimit(1).help(detail.status)
+                Spacer(minLength: 4)
+                Text(detail.holiday ?? detail.status)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(detail.holiday != nil ? MenuPalette.coral : MenuPalette.teal)
+                    .lineLimit(1).help(detail.holiday ?? detail.status)
             }
-            Text(detail.minutes.map(AttendanceSnapshot.duration) ?? "근무시간 기록 없음")
-                .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(detail.record.map { record in
-                detail.key == snapshot.record?.date ? snapshot.attendanceDescription :
-                    "출근 \(AttendanceSnapshot.clock(record.start)) · 퇴근 \(AttendanceSnapshot.clock(record.end))"
-            } ?? "출퇴근 기록 없음")
-                .font(.caption).foregroundStyle(.secondary)
-                .lineLimit(1)
-            Text(detail.holiday ?? " ")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                .help(detail.holiday ?? "")
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    leavePicker("소정근로시간", field: \.recognizesScheduledWork, date: detail.key)
-                    leavePicker("초과근로 산정", field: \.recognizesOvertime, date: detail.key)
+            HStack(spacing: 6) {
+                Image(systemName: "clock").foregroundStyle(MenuPalette.teal)
+                Text(clockText).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(MenuPalette.secondary(colorScheme))
+            Divider().overlay(MenuPalette.border(colorScheme))
+            HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 3) {
+                    leavePicker("소정근로 인정", field: \.recognizesScheduledWork, date: detail.key)
+                    leavePicker("초과근로 반영", field: \.recognizesOvertime, date: detail.key)
                 }
-                Button("휴가 없음") { setLeave(nil, detail.key) }
-                    .disabled(snapshot.leaveByDate[detail.key] == nil)
+                Button {
+                    setLeave(nil, detail.key)
+                } label: {
+                    Label("휴가 없음", systemImage: "calendar.badge.minus")
+                        .font(.system(size: 10, weight: .medium))
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(MenuPalette.teal)
+                .disabled(!editable || snapshot.leaveByDate[detail.key] == nil)
+                .help("선택 날짜의 휴가 처리 설정을 지웁니다")
             }
-            .disabled(!canEditLeave || detail.key < snapshot.month.startDate ||
-                      detail.key > snapshot.month.endDate ||
-                      !snapshot.calendarRecords.contains { $0.date == detail.key })
-            Text("앱 내 계산에만 반영 · 회사에 신청하지 않음")
-                .font(.caption2).foregroundStyle(.secondary)
+            .disabled(!editable)
+            .opacity(editable ? 1 : 0.55)
+            HStack(spacing: 4) {
+                Image(systemName: "info.circle")
+                Text("앱 내 계산에만 반영 · 회사에 신청하지 않음")
+            }
+            .font(.system(size: 9))
+            .foregroundStyle(MenuPalette.secondary(colorScheme))
+            .lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 160, alignment: .top)
+        .frame(height: 156, alignment: .top)
     }
 
     private func leavePicker(_ title: String, field: WritableKeyPath<LeaveOptions, Bool>, date: String) -> some View {
-        HStack(spacing: 8) {
-            Text(title).font(.caption).frame(width: 80, alignment: .leading)
+        HStack(spacing: 6) {
+            Text(title).font(.system(size: 9, weight: .medium)).frame(width: 105, alignment: .leading)
             Picker(title, selection: Binding<Bool?>(
                 get: { snapshot.leaveByDate[date].map { $0[keyPath: field] } },
                 set: { value in
@@ -1435,6 +1596,8 @@ struct AttendanceCalendarView: View {
                 .horizontalRadioGroupLayout()
                 .labelsHidden()
                 .controlSize(.small)
+                .pickerStyle(.segmented)
+                .frame(width: 112)
                 .accessibilityLabel("\(date) \(title)")
         }
     }
@@ -1443,141 +1606,214 @@ struct AttendanceCalendarView: View {
 struct TodaySummary: View {
     let snapshot: AttendanceSnapshot
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var status: String {
+        guard snapshot.attendanceKnown else { return "근태 확인 불가" }
+        if snapshot.record?.isWorking == true { return "근무 중" }
+        if snapshot.record?.end?.isEmpty == false { return "근무 완료" }
+        if snapshot.record?.isScheduledWorkday == false { return "휴무일" }
+        return snapshot.record == nil ? "기록 없음" : "출근 전"
+    }
+
     var body: some View {
         let meter = snapshot.todayMeter
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("오늘").font(.system(size: 16, weight: .semibold))
+                    Text(snapshot.updatedAt.formatted(.dateTime.month(.defaultDigits).day().weekday(.abbreviated)))
+                        .font(.system(size: 11)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                }
+                Spacer(minLength: 2)
+                HStack(spacing: 5) {
+                    Circle().fill(status == "근무 중" ? MenuPalette.amber : MenuPalette.teal)
+                        .frame(width: 7, height: 7)
+                    Text(status).font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(status == "근무 중" ? MenuPalette.amber : MenuPalette.teal)
+                .padding(.horizontal, 9).padding(.vertical, 5)
+                .background(status == "근무 중" ? MenuPalette.amberSoft(colorScheme) : MenuPalette.tealSoft(colorScheme),
+                            in: Capsule())
+                .accessibilityElement(children: .combine)
+            }
+            Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
+                .font(.system(size: 36, weight: .bold, design: .rounded)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.75)
             HStack {
-                Text(snapshot.dayTitle).font(.subheadline.weight(.semibold))
+                Text("기준 8시간 0분")
+                    .font(.system(size: 12)).foregroundStyle(MenuPalette.secondary(colorScheme))
                 Spacer()
                 if snapshot.attendanceKnown {
                     Text("\(meter.percent)% 달성")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(MenuPalette.teal)
                 }
             }
-            Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
-                .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
             if snapshot.attendanceKnown {
-                Text("기준 \(AttendanceSnapshot.duration(meter.targetMinutes))")
-                    .font(.caption).foregroundStyle(.secondary)
                 WorkProgressBar(fill: Double(meter.actualMinutes) / Double(meter.targetMinutes), markers: [],
                                 value: "8시간 기준 \(meter.percent)%",
-                                label: "\(snapshot.dayTitle) 근무시간 진행률")
-                if let leave = snapshot.record.flatMap({ snapshot.leaveByDate[$0.date] }) {
-                    Text(leave.title).font(.caption)
-                }
+                                label: "오늘 근무시간 진행률")
             } else {
-                Text("진행률 확인 불가").font(.caption)
+                ProgressView(value: 0)
+                    .tint(MenuPalette.teal)
+                    .accessibilityLabel("오늘 근무시간 진행률 확인 불가")
             }
-            Text(snapshot.attendanceDescription).font(.caption)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "clock").foregroundStyle(MenuPalette.teal)
+                Text(snapshot.attendanceDescription)
+                    .lineLimit(1).minimumScaleFactor(0.75)
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(MenuPalette.secondary(colorScheme))
             if let note = snapshot.attendanceNote {
-                Text(note).font(.caption).foregroundStyle(.secondary)
+                Text(note).font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
             }
         }
     }
 }
 
-
 struct MonthSummary: View {
     let snapshot: AttendanceSnapshot
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            let month = snapshot.displayMonth
-            let compensation = snapshot.displayCompensationEstimate
-            let holiday = snapshot.leaveDeduction?.maximumMinutes ?? 0
-            let range = holiday + max(month.maximumWorkMinutes ?? 0,
-                                      max(month.targetMinutes, compensation?.thresholdMinutes ?? 0))
-            let meter = WorkMeter(actualMinutes: month.creditedMinutes, targetMinutes: range)
-            let confirmedMeter = WorkMeter(actualMinutes: snapshot.month.creditedMinutes, targetMinutes: range)
-            let holidayMeter = WorkMeter(actualMinutes: holiday, targetMinutes: range)
-            let liveValue = snapshot.liveWorkClock == nil ? "" :
-                ", 확정 \(AttendanceSnapshot.duration(snapshot.month.creditedMinutes)), 진행 중 \(AttendanceSnapshot.duration(max(0, month.creditedMinutes - snapshot.month.creditedMinutes)))"
-            let pace = snapshot.paceDifferenceMinutes
-            let markers: [(position: Double?, color: Color, description: String)] = [
-                (range > 0 ? Double(snapshot.expectedMinutesByNow) / Double(range) : 0, .red,
-                 "\(snapshot.dayTitle)까지 기준 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
-                 "\(AttendanceSnapshot.duration(abs(pace))) \(pace >= 0 ? "앞섬" : "부족")"),
-                (range > 0 ? Double(month.targetMinutes) / Double(range) : 0, .blue,
-                 month.balance >= 0
-                  ? "필수 근무시간 - \(AttendanceSnapshot.duration(month.balance)) 초과"
-                  : "필수 근무시간 - **\(AttendanceSnapshot.duration(month.remainingMinutes))**"),
-                (compensation.map { range > 0 ? Double($0.thresholdMinutes) / Double(range) : 0 }, .purple,
-                 compensation.map {
-                     $0.remainingMinutes > 0
-                      ? "수당 기준 - **\(AttendanceSnapshot.duration($0.remainingMinutes))**"
-                      : "수당 기준 - \(AttendanceSnapshot.duration($0.excessMinutes)) 초과"
-                 } ?? "수당 기준 확인 불가")
-            ]
-            HStack {
-                Text(snapshot.monthTitle).font(.subheadline.weight(.semibold))
-                Spacer()
-                Text("필수시간 대비 \(snapshot.monthMeter.percent)%")
-                    .font(.subheadline.weight(.semibold))
-            }
-            Text("누적 \(AttendanceSnapshot.duration(month.actualMinutes))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("남은 근무일").font(.caption).foregroundStyle(.secondary)
-                    Text("\(snapshot.remainingRequiredWorkDays)일")
-                        .font(.headline).monospacedDigit()
+        let monthNumber = Int(snapshot.month.startDate.dropFirst(5).prefix(2))
+        let meter = snapshot.monthMeter
+        let fill = meter.targetMinutes > 0 ? Double(max(0, meter.actualMinutes)) / Double(meter.targetMinutes) : 0
+        let average = snapshot.dailyRequiredHours.map { AttendanceSnapshot.duration(Int(ceil($0 * 60))) } ?? "—"
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "calendar").foregroundStyle(MenuPalette.teal)
+                Text(snapshot.monthTitle).font(.system(size: 16, weight: .semibold))
+                if let monthNumber {
+                    Text("\(monthNumber)월").font(.system(size: 12))
+                        .foregroundStyle(MenuPalette.secondary(colorScheme))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("하루 필요").font(.caption).foregroundStyle(.secondary)
-                    Text(snapshot.dailyRequiredHours.map { AttendanceSnapshot.duration(Int(ceil($0 * 60))) } ?? "—")
-                        .font(.headline).monospacedDigit()
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 2)
+                Text("필수시간 대비 \(meter.percent)%")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(meter.percent >= 100 ? MenuPalette.teal : MenuPalette.secondary(colorScheme))
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(meter.percent >= 100 ? MenuPalette.tealSoft(colorScheme) : MenuPalette.canvas(colorScheme),
+                                in: Capsule())
             }
-            .padding(10)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(AttendanceSnapshot.duration(snapshot.displayMonth.actualMinutes))
+                    .font(.system(size: 28, weight: .bold, design: .rounded)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.75)
+                Text("누적 근무시간").font(.system(size: 11)).foregroundStyle(MenuPalette.secondary(colorScheme))
+            }
+            WorkProgressBar(
+                fill: fill,
+                markers: [],
+                value: "\(meter.percent)%",
+                label: "월 필수 근무시간 진행률"
+            )
+            HStack(spacing: 8) {
+                metric("남은 근무일", value: "\(snapshot.remainingRequiredWorkDays)일", symbol: "calendar")
+                metric("하루 필요", value: average, symbol: "target")
+            }
             Text("퇴근 전 오늘 포함 · 남은 필수시간 기준")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            WorkProgressBar(fill: meter.fillFraction, markers: markers,
-                            value: "필수시간 반영 \(AttendanceSnapshot.duration(month.creditedMinutes)), 필수시간 대비 \(snapshot.monthMeter.percent)%" + liveValue,
-                            label: "월간 누적 근무시간", confirmedFill: confirmedMeter.fillFraction,
-                            holidayFill: holidayMeter.fillFraction)
-            ForEach(markers.indices, id: \.self) { index in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(markers[index].color)
-                        .accessibilityHidden(true)
-                    Text(LocalizedStringKey(markers[index].description))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .font(.caption)
-            }
-            if let maximum = snapshot.month.maximumWorkMinutes {
-                Text("최대 \(AttendanceSnapshot.duration(maximum))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let deduction = snapshot.leaveDeduction, !deduction.dates.isEmpty {
-                let dates = deduction.dates.map { date in
-                    let parts = date.split(separator: "-").compactMap { Int($0) }
-                    return parts.count == 3 ? "\(parts[1])/\(parts[2])" : date
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 8))
-                        .foregroundStyle(WorkProgressBar.holidayColor)
-                        .accessibilityHidden(true)
-                    Text("휴가 \(dates.joined(separator: ", ")) · −\(AttendanceSnapshot.duration(deduction.minutes))")
-                }
-                .font(.caption)
-            }
+                .font(.system(size: 9)).foregroundStyle(MenuPalette.secondary(colorScheme))
         }
+    }
+
+    private func metric(_ title: String, value: String, symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .medium)).foregroundStyle(MenuPalette.teal)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                Text(value).font(.system(size: 14, weight: .semibold)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, 8)
+        .background(MenuPalette.tealSoft(colorScheme), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct CalculationDetails: View {
+    let snapshot: AttendanceSnapshot
+    @State private var expanded = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let month = snapshot.displayMonth
+        let compensation = snapshot.displayCompensationEstimate
+        let holiday = snapshot.leaveDeduction?.maximumMinutes ?? 0
+        let range = holiday + max(month.maximumWorkMinutes ?? 0,
+                                 max(month.targetMinutes, compensation?.thresholdMinutes ?? 0))
+        let meter = WorkMeter(actualMinutes: month.creditedMinutes, targetMinutes: range)
+        let confirmedMeter = WorkMeter(actualMinutes: snapshot.month.creditedMinutes, targetMinutes: range)
+        let holidayMeter = WorkMeter(actualMinutes: holiday, targetMinutes: range)
+        let liveValue = snapshot.liveWorkClock == nil ? "" :
+            ", 확정 \(AttendanceSnapshot.duration(snapshot.month.creditedMinutes)), 진행 중 \(AttendanceSnapshot.duration(max(0, month.creditedMinutes - snapshot.month.creditedMinutes)))"
+        let pace = snapshot.paceDifferenceMinutes
+        let markers: [(position: Double?, color: Color, description: String)] = [
+            (range > 0 ? Double(snapshot.expectedMinutesByNow) / Double(range) : 0, .red,
+             "\(snapshot.dayTitle)까지 기준 \(AttendanceSnapshot.duration(snapshot.expectedMinutesByNow)) · " +
+             "\(AttendanceSnapshot.duration(abs(pace))) \(pace >= 0 ? "앞섬" : "부족")"),
+            (range > 0 ? Double(month.targetMinutes) / Double(range) : 0, .blue,
+             month.balance >= 0
+              ? "필수 근무시간 - \(AttendanceSnapshot.duration(month.balance)) 초과"
+              : "필수 근무시간 - **\(AttendanceSnapshot.duration(month.remainingMinutes))**"),
+            (compensation.map { range > 0 ? Double($0.thresholdMinutes) / Double(range) : 0 }, .purple,
+             compensation.map {
+                 $0.remainingMinutes > 0
+                  ? "수당 기준 - **\(AttendanceSnapshot.duration($0.remainingMinutes))**"
+                  : "수당 기준 - \(AttendanceSnapshot.duration($0.excessMinutes)) 초과"
+             } ?? "수당 기준 확인 불가")
+        ]
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("퇴근 전 오늘 포함 · 남은 필수시간 기준")
+                    .font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                WorkProgressBar(fill: meter.fillFraction, markers: markers,
+                                value: "필수시간 반영 \(AttendanceSnapshot.duration(month.creditedMinutes)), 필수시간 대비 \(snapshot.monthMeter.percent)%" + liveValue,
+                                label: "월간 누적 근무시간", confirmedFill: confirmedMeter.fillFraction,
+                                holidayFill: holidayMeter.fillFraction)
+                ForEach(markers.indices, id: \.self) { index in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "circle.fill").font(.system(size: 7))
+                            .foregroundStyle(markers[index].color).accessibilityHidden(true)
+                        Text(LocalizedStringKey(markers[index].description))
+                            .font(.system(size: 10)).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let maximum = snapshot.month.maximumWorkMinutes {
+                    Text("최대 \(AttendanceSnapshot.duration(maximum))")
+                        .font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                }
+                if let deduction = snapshot.leaveDeduction, !deduction.dates.isEmpty {
+                    let dates = deduction.dates.map { date in
+                        let parts = date.split(separator: "-").compactMap { Int($0) }
+                        return parts.count == 3 ? "\(parts[1])/\(parts[2])" : date
+                    }
+                    Label("휴가 \(dates.joined(separator: ", ")) · −\(AttendanceSnapshot.duration(deduction.minutes))",
+                          systemImage: "circle.fill")
+                        .font(.system(size: 10)).foregroundStyle(MenuPalette.secondary(colorScheme))
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label("계산 기준 상세", systemImage: "chart.bar")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MenuPalette.text(colorScheme))
+        }
+        .tint(MenuPalette.teal)
+        .accessibilityIdentifier("calculation-details")
+        .accessibilityValue(expanded ? "펼침" : "접힘")
     }
 }
 
 struct WorkProgressBar: View {
-    static let confirmedColor = Color(red: 0.16, green: 0.66, blue: 0.73)
+    static let confirmedColor = MenuPalette.teal
     static let holidayColor = Color.black
-    static let ongoingColor = Color.orange
+    static let ongoingColor = MenuPalette.amber
     let fill: Double
     let markers: [(position: Double?, color: Color, description: String)]
     let value: String

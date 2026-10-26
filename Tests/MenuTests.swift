@@ -121,37 +121,21 @@ struct MenuTests {
                 abs(pixel.blueComponent - expected.blueComponent) < 0.08
         }
 
-        // Each hour is one donut segment; newer laps fill clockwise over the completed lap.
-        let empty = Array(repeating: 0.0, count: 6)
-        let full = Array(repeating: 1.0, count: 6)
+        // The ring always has eight slots, including short targets and unknown attendance.
+        let empty = Array(repeating: 0.0, count: 8)
+        let full = Array(repeating: 1.0, count: 8)
         let iconCases: [(String, WorkMeter?, [Double], [Double], [Double])] = [
-            ("unknown", nil, [0], [0], [0]),
-            ("empty", WorkMeter(actualMinutes: 0, targetMinutes: 360), empty, empty, empty),
-            ("ten-minutes", WorkMeter(actualMinutes: 10, targetMinutes: 360),
-             [1.0 / 6, 0, 0, 0, 0, 0], empty, empty),
-            ("half-hour", WorkMeter(actualMinutes: 30, targetMinutes: 360),
-             [0.5, 0, 0, 0, 0, 0], empty, empty),
-            ("one-hour", WorkMeter(actualMinutes: 60, targetMinutes: 360),
-             [1, 0, 0, 0, 0, 0], empty, empty),
-            ("half-third", WorkMeter(actualMinutes: 150, targetMinutes: 360),
-             [1, 1, 0.5, 0, 0, 0], empty, empty),
-            ("green-full", WorkMeter(actualMinutes: 360, targetMinutes: 360), full, empty, empty),
-            ("yellow-start", WorkMeter(actualMinutes: 361, targetMinutes: 360),
-             [59.0 / 60, 1, 1, 1, 1, 1], [1.0 / 60, 0, 0, 0, 0, 0], empty),
-            ("yellow-half-second", WorkMeter(actualMinutes: 450, targetMinutes: 360),
-             [0, 0.5, 1, 1, 1, 1], [1, 0.5, 0, 0, 0, 0], empty),
-            ("yellow-full", WorkMeter(actualMinutes: 720, targetMinutes: 360), empty, full, empty),
-            ("red-start", WorkMeter(actualMinutes: 721, targetMinutes: 360),
-             empty, [59.0 / 60, 1, 1, 1, 1, 1], [1.0 / 60, 0, 0, 0, 0, 0]),
-            ("red-half-second", WorkMeter(actualMinutes: 810, targetMinutes: 360),
-             empty, [0, 0.5, 1, 1, 1, 1], [1, 0.5, 0, 0, 0, 0]),
-            ("red-full", WorkMeter(actualMinutes: 1080, targetMinutes: 360), empty, empty, full),
-            ("beyond-red", WorkMeter(actualMinutes: 1200, targetMinutes: 360), empty, empty, full),
-            ("partial-last-cell", WorkMeter(actualMinutes: 370, targetMinutes: 380),
-             [1, 1, 1, 1, 1, 1, 0.5], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]),
-            ("partial-last-overlay", WorkMeter(actualMinutes: 750, targetMinutes: 380),
-             [0, 0, 0, 0, 0, 0, 0.5], [1, 1, 1, 1, 1, 1, 0.5], [0, 0, 0, 0, 0, 0, 0]),
-            ("zero-target", WorkMeter(actualMinutes: 30, targetMinutes: 0), [0], [0.5], [0])
+            ("no-attendance", nil, empty, empty, empty),
+            ("ten-minutes", WorkMeter(actualMinutes: 10, targetMinutes: 480), [1.0 / 6, 0, 0, 0, 0, 0, 0, 0], empty, empty),
+            ("half-target", WorkMeter(actualMinutes: 240, targetMinutes: 480), [1, 1, 1, 1, 0, 0, 0, 0], empty, empty),
+            ("short-half-target", WorkMeter(actualMinutes: 90, targetMinutes: 180), [1, 1, 1, 1, 0, 0, 0, 0], empty, empty),
+            ("short-target", WorkMeter(actualMinutes: 360, targetMinutes: 360), full, empty, empty),
+            ("full-target", WorkMeter(actualMinutes: 480, targetMinutes: 480), full, empty, empty),
+            ("one-hour-over", WorkMeter(actualMinutes: 540, targetMinutes: 480), [0, 1, 1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0, 0, 0], empty),
+            ("second-lap-complete", WorkMeter(actualMinutes: 960, targetMinutes: 480), empty, full, empty),
+            ("red-lap", WorkMeter(actualMinutes: 990, targetMinutes: 480), empty, [0.5, 1, 1, 1, 1, 1, 1, 1], [0.5, 0, 0, 0, 0, 0, 0, 0]),
+            ("red-lap-complete", WorkMeter(actualMinutes: 1440, targetMinutes: 480), empty, empty, full),
+            ("beyond-three-laps", WorkMeter(actualMinutes: 1500, targetMinutes: 480), empty, empty, full),
         ]
         for appearanceName in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = NSAppearance(named: appearanceName)!
@@ -171,7 +155,7 @@ struct MenuTests {
                                                       radius: finished ? 7.75 : 6.5)
                                 for color in [NSColor.systemGreen, .systemYellow, .systemRed] {
                                     precondition(matches(pixel, color) == (color == expected),
-                                                 "\(appearanceName.rawValue) \(name) ended=\(finished) hour \(hour) at \(p)")
+                                                 "Unexpected ring color: \(appearanceName.rawValue) \(name)")
                                 }
                                 if expected == nil {
                                     precondition(matches(pixel, .white),
@@ -192,8 +176,8 @@ struct MenuTests {
                                          name: "started-zero", appearance: appearance)
             precondition(before.colorAt(x: 18, y: 18)!.alphaComponent > 0.1)
             precondition(started.colorAt(x: 18, y: 18)!.alphaComponent == 0)
-            for hour in 0..<6 {
-                precondition(matches(ringPixel(before, hours: 6, hour: hour, at: 0.5, radius: 6.5), .white))
+            for hour in 0..<8 {
+                precondition(matches(ringPixel(before, hours: 8, hour: hour, at: 0.5, radius: 6.5), .white))
             }
             var unknown = waiting
             unknown.attendanceKnown = false
@@ -207,11 +191,11 @@ struct MenuTests {
             let noTarget = try renderIcon(offDay, name: "ended-no-target", appearance: appearance)
             precondition(noTarget.pixelsWide == 36)
             appearance.performAsCurrentDrawingAppearance {
-                precondition(ringPixel(noTarget, hours: 3, hour: 0, at: 0.5, radius: 7.75).alphaComponent > 0.9)
-                precondition(matches(ringPixel(noTarget, hours: 3, hour: 2, at: 0.3, radius: 5.5), .systemGray))
-                precondition(!matches(ringPixel(noTarget, hours: 3, hour: 2, at: 0.8, radius: 5.5), .systemGray))
-                for hour in 0..<3 {
-                    let pixel = ringPixel(noTarget, hours: 3, hour: hour, at: 0.3, radius: 7.75)
+                precondition(ringPixel(noTarget, hours: 8, hour: 0, at: 0.5, radius: 7.75).alphaComponent > 0.9)
+                precondition(matches(ringPixel(noTarget, hours: 8, hour: 2, at: 0.3, radius: 5.5), .systemGray))
+                precondition(matches(ringPixel(noTarget, hours: 8, hour: 2, at: 0.8, radius: 5.5), .systemGray))
+                for hour in 0..<8 {
+                    let pixel = ringPixel(noTarget, hours: 8, hour: hour, at: 0.3, radius: 7.75)
                     precondition(!matches(pixel, .systemYellow) && !matches(pixel, .systemRed))
                 }
             }

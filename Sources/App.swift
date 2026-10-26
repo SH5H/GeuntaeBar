@@ -910,7 +910,7 @@ struct LaunchLabel: View {
         let meter = snapshot?.minimumTodayMeter
         let actual = started ? max(0, snapshot?.todayMinutes ?? 0) : 0
         let target = max(0, meter?.targetMinutes ?? actual)
-        let hours = max(1, Int(ceil(Double(target > 0 ? target : actual) / 60)))
+        let hours = 8
         let colors: [NSColor] = meter == nil ? [.secondaryLabelColor]
             : target > 0 ? [.systemGreen, .systemYellow, .systemRed] : [.systemYellow]
         let segment = 360 / CGFloat(hours)
@@ -930,14 +930,14 @@ struct LaunchLabel: View {
                 NSColor.white.setFill()
                 arc(hour, 1)
                 if waiting { continue }
-                let capacity = meter != nil && target > 0 ? min(60, target - hour * 60) : 60
-                let worked = min(capacity, max(0, actual - hour * 60))
+                let capacity = Double(target > 0 ? target : 480) / Double(hours)
+                let worked = min(capacity, max(0, Double(actual) - Double(hour) * capacity))
                 if finished {
                     NSColor.systemGray.setFill()
                     arc(hour, Double(worked) / Double(capacity))
                 }
                 for (lap, color) in colors.enumerated() {
-                    let minutes = min(capacity, max(0, actual - lap * target - hour * 60))
+                    let minutes = min(capacity, max(0, Double(actual - lap * target) - Double(hour) * capacity))
                     guard minutes > 0 else { continue }
                     color.setFill()
                     arc(hour, Double(minutes) / Double(capacity), inner: finished ? 7 : 4.5)

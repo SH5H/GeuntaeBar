@@ -208,7 +208,7 @@ struct MenuTests {
         }
 
         func render(_ record: DailyRecord, days: Int = 2, required: Int = 7680, report: MonthlyReport? = nil,
-                    compensation: Bool = true, refreshDay: Bool = true,
+                    compensation: Bool = true, refreshDay: Bool = true, attendanceKnown: Bool = true,
                     name: String) async throws -> (NSBitmapImageRep, [String]) {
             let month = report ?? MonthlyReport(workedMinutes: 6960 + (record.totalMinutes ?? 0), outsideMinutes: 0,
                                       requiredMinutes: required, vacationMinutes: 0,
@@ -217,6 +217,7 @@ struct MenuTests {
                                       maximumWorkMinutes: 9600)
             var snapshot = AttendanceSnapshot(record: record, month: month,
                                               remainingWorkDays: days, updatedAt: now)
+            snapshot.attendanceKnown = attendanceKnown
             snapshot.dailyRestMinutes = 60
             if compensation {
                 let days = refreshDay ? [DailyRecord(date: month.startDate, holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE")] : []
@@ -262,6 +263,7 @@ struct MenuTests {
         precondition(texts.joined().contains("예상퇴근18:00"))
         precondition(texts.joined().contains("필수시간대비94%"))
         precondition(texts.joined().contains("최대160시간0분"))
+        precondition(!texts.joined().contains("더필요"))
         let overtime = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 600, holidayStatus: workday)
         let overtimeMonth = MonthlyReport(workedMinutes: 6960 + 600, outsideMinutes: 0,
@@ -295,6 +297,14 @@ struct MenuTests {
         let before = DailyRecord(date: date, scheduledEnd: scheduledEnd, holidayStatus: workday)
         let (_, beforeTexts) = try await render(before, name: "before-clock-in")
         precondition(beforeTexts.joined().contains("0%달성"))
+        let (_, remainingTexts) = try await render(before, required: 7710, name: "before-remaining")
+        precondition(remainingTexts.joined().contains("12시간30분더필요"), remainingTexts.joined())
+        let (_, achievedTexts) = try await render(before, required: 6900, name: "before-achieved")
+        precondition(achievedTexts.joined().contains("필수근무달성"), achievedTexts.joined())
+        precondition(!achievedTexts.joined().contains("더필요"))
+        let (_, unknownTexts) = try await render(before, attendanceKnown: false, name: "unknown-attendance")
+        precondition(!unknownTexts.joined().contains("더필요"))
+        precondition(!unknownTexts.joined().contains("필수근무달성"))
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)
         let (_, endedTexts) = try await render(ended, days: 1, name: "after-clock-out")

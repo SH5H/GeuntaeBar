@@ -1406,13 +1406,20 @@ struct TodaySummary: View {
             }
             Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
                 .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
+            if snapshot.attendanceKnown && snapshot.record?.start?.isEmpty != false {
+                let remaining = snapshot.displayMonth.remainingMinutes
+                Text(remaining > 0
+                     ? "\(snapshot.monthTitle) 필수근무까지 \(AttendanceSnapshot.duration(remaining)) 더 필요"
+                     : "\(snapshot.monthTitle) 필수근무 달성")
+                    .font(.subheadline.weight(.medium))
+            }
             if let minimum = snapshot.minimumTodayMeter {
                 Text("최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
                     .font(.caption).foregroundStyle(.secondary)
                 WorkProgressBar(fill: snapshot.minimumTodayFill, markers: [],
                                 value: minimum.targetMinutes > 0 ? "실제 \(minimum.percent)%" : "필수시간 달성",
                                 label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
-                if minimum.targetMinutes == 0 {
+                if minimum.targetMinutes == 0 && snapshot.record?.start?.isEmpty == false {
                     Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
                 }
             } else {

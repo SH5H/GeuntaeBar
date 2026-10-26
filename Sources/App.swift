@@ -1242,7 +1242,7 @@ struct CalendarDayDetail {
         guard snapshot.attendanceKnown, record?.isScheduledWorkday == true,
               record?.start?.isEmpty != false, minutes == nil, holiday == nil,
               key >= snapshot.month.startDate, key <= snapshot.month.endDate else { return nil }
-        return snapshot.displayMonth.remainingMinutes
+        return snapshot.dailyRequiredHours.map { Int(ceil($0 * 60)) }
     }
 }
 
@@ -1329,7 +1329,7 @@ struct AttendanceCalendarView: View {
         let remaining = detail.remainingRequiredMinutes
         let requirement = remaining.map {
             $0 > 0
-                ? "현재 \(snapshot.monthTitle) 필수근무까지 \(AttendanceSnapshot.duration($0)) 더 필요"
+                ? "하루 평균 \(AttendanceSnapshot.duration($0)) 필요 · 남은 월 필수시간을 남은 근무일로 나눈 값"
                 : "현재 \(snapshot.monthTitle) 필수근무 달성"
         }
         return Button { selectedDate = date } label: {

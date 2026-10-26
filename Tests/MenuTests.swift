@@ -335,7 +335,7 @@ struct MenuTests {
         }
         let (remainingImage, _) = try await render(before, required: 7710, name: "before-remaining")
         let remainingText = try calendarText(remainingImage)
-        precondition(remainingText.contains("12:30필요"), remainingText)
+        precondition(remainingText.contains("6:15필요"), remainingText)
         let (achievedImage, _) = try await render(before, required: 6900, name: "before-achieved")
         let achievedText = try calendarText(achievedImage)
         precondition(achievedText.contains("달성"), achievedText)
@@ -406,10 +406,11 @@ struct MenuTests {
         precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-06").minutes == 0,
                      "An actual zero-minute attendance record must remain visible")
         calendarSnapshot.month.workedMinutes = 8850
-        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == 750)
+        calendarSnapshot.remainingWorkDays = 2
+        precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == 375)
         for key in [date, "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-06"] {
             precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: key).remainingRequiredMinutes == nil,
-                         "Only known, unattended workdays may show the monthly requirement")
+                         "Only known, unattended workdays may show the daily requirement")
         }
         calendarSnapshot.leaveByDate["2026-10-05"] = .paid
         precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == nil)

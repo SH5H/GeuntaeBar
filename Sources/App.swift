@@ -1339,7 +1339,7 @@ struct AttendanceCalendarView: View {
                     .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
                 Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
                      ?? snapshot.leaveByDate[key].map { $0 == .paid ? "유급" : "무급" }
-                     ?? remaining.map { $0 > 0 ? String(format: "%d:%02d 필요", $0 / 60, $0 % 60) : "달성" }
+                     ?? remaining.map { $0 > 0 ? String(format: "-%d:%02d", $0 / 60, $0 % 60) : "달성" }
                      ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
                     .font(.system(size: 9, weight: .medium)).monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.75)

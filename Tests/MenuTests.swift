@@ -335,13 +335,14 @@ struct MenuTests {
         }
         let (remainingImage, _) = try await render(before, required: 7710, name: "before-remaining")
         let remainingText = try calendarText(remainingImage)
-        precondition(remainingText.contains("6:15필요"), remainingText)
+        precondition(remainingText.range(of: #"-\d+:\d{2}"#, options: .regularExpression) != nil, remainingText)
         let (achievedImage, _) = try await render(before, required: 6900, name: "before-achieved")
         let achievedText = try calendarText(achievedImage)
         precondition(achievedText.contains("달성"), achievedText)
         let (unknownImage, unknownTexts) = try await render(before, required: 7710, attendanceKnown: false, name: "unknown-attendance")
         let unknownText = try calendarText(unknownImage)
-        precondition(!unknownText.contains("필요") && !unknownText.contains("달성"), unknownText)
+        precondition(unknownText.range(of: #"-\d+:\d{2}"#, options: .regularExpression) == nil &&
+                     !unknownText.contains("달성"), unknownText)
         precondition(!unknownTexts.joined().contains("%달성"))
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)

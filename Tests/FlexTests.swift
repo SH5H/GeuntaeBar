@@ -104,7 +104,6 @@ struct FlexTests {
         var ticking = live
         ticking.advanceLiveTime(to: live.updatedAt.addingTimeInterval(60))
         precondition(ticking.todayMinutes == 145 && ticking.menuTitle.contains("2시간 25분"))
-        precondition(ticking.minimumTodayFill > live.minimumTodayFill)
         precondition(ticking.updatedAt == live.updatedAt && ticking.month.actualMinutes == 4200)
         precondition(ticking.month.creditedMinutes == 3770 && ticking.minimumTodayMeter?.targetMinutes == 486)
         precondition(ticking.displayMonth.actualMinutes == 4345 && ticking.monthMeter.actualMinutes == 3915)

@@ -473,7 +473,7 @@ struct AttendanceSnapshot {
 
     var todayMinutes: Int { record?.totalMinutes ?? 0 }
     var todayMeter: WorkMeter {
-        WorkMeter(actualMinutes: todayMinutes, targetMinutes: month.dailyRequiredMinutes)
+        WorkMeter(actualMinutes: todayMinutes, targetMinutes: 480)
     }
     /// Remaining workdays this month; today counts while it is a scheduled workday not yet finished.
     private var remainingDaysIncludingToday: Int {
@@ -506,10 +506,6 @@ struct AttendanceSnapshot {
         let days = remainingRequiredWorkDays
         guard attendanceKnown, days > 0 else { return nil }
         return Double(displayMonth.remainingMinutes) / Double(days) / 60
-    }
-    var minimumTodayFill: Double {
-        guard let meter = minimumTodayMeter else { return 0 }
-        return meter.targetMinutes == 0 ? 1 : Double(max(0, meter.actualMinutes)) / Double(meter.targetMinutes)
     }
     var minimumTodayOvertimeMinutes: Int {
         guard let meter = minimumTodayMeter else { return 0 }

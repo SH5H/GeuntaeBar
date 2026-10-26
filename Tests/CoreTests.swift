@@ -150,7 +150,6 @@ struct CoreTests {
                                                  remainingWorkDays: 2, updatedAt: morning)
         // Today's 4 hours are included in the month: the daily goal stays 8 hours, not 6.
         precondition(minimumSnapshot.minimumTodayMeter?.targetMinutes == 480)
-        precondition(minimumSnapshot.minimumTodayFill == 0.5)
         precondition(minimumSnapshot.expectedMinutesByNow == 7440)
         // Extra work uses today's six-hour minimum, even before the month is in surplus.
         for minutes in [0, 240, 360, 440, 720, 900] {
@@ -166,7 +165,6 @@ struct CoreTests {
                                               remainingWorkDays: 2, updatedAt: morning)
             let extra = max(0, minutes - 360)
             precondition(progress.minimumTodayMeter?.targetMinutes == 360)
-            precondition(progress.minimumTodayFill == Double(minutes) / 360)
             precondition(progress.minimumTodayOvertimeMinutes == extra)
             precondition(progress.menuTitle.contains(" · +") == (extra > 0))
             if minutes == 440 {
@@ -243,8 +241,6 @@ struct CoreTests {
         precondition(AttendanceSnapshot(record: laterDay, month: laterMonth,
                                         remainingWorkDays: 2, updatedAt: morning).minimumTodayMeter?.targetMinutes == 480)
         precondition(AttendanceSnapshot(record: laterDay, month: laterMonth,
-                                        remainingWorkDays: 2, updatedAt: morning).minimumTodayFill == 0.75)
-        precondition(AttendanceSnapshot(record: laterDay, month: laterMonth,
                                         remainingWorkDays: 2, updatedAt: morning).expectedMinutesByNow == 7440)
         // The goal is stable after the schedule ends or the employee clocks out.
         precondition(AttendanceSnapshot(record: minimumDay, month: minimumMonth,
@@ -270,11 +266,11 @@ struct CoreTests {
                                         remainingWorkDays: 2, updatedAt: morning).minimumTodayMeter?.targetMinutes == 481)
         let achieved = AttendanceSnapshot(record: minimumDay, month: month,
                                            remainingWorkDays: 2, updatedAt: morning)
-        precondition(achieved.minimumTodayMeter?.targetMinutes == 0 && achieved.minimumTodayFill == 1)
+        precondition(achieved.minimumTodayMeter?.targetMinutes == 0)
         precondition(achieved.minimumTodayOvertimeMinutes == 240)
         let noDays = AttendanceSnapshot(record: offDay, month: minimumMonth,
                                         remainingWorkDays: 0, updatedAt: evening)
-        precondition(noDays.minimumTodayMeter == nil && noDays.minimumTodayFill == 0)
+        precondition(noDays.minimumTodayMeter == nil)
         precondition(noDays.minimumTodayOvertimeMinutes == 0)
         precondition(noDays.expectedMinutesByNow == minimumMonth.targetMinutes)
         let unevenSnapshot = AttendanceSnapshot(record: minimumDay, month: unevenMonth,
@@ -306,6 +302,18 @@ struct CoreTests {
         precondition(AttendanceSnapshot.clock("2026-09-29 18:00:00") == "18:00")
         precondition(snapshot.todayMeter.actualMinutes == 150)
         precondition(snapshot.todayMeter.targetMinutes == 480)
+        let shortDayMonth = MonthlyReport(workedMinutes: 8000, outsideMinutes: 0, requiredMinutes: 7920,
+                                          vacationMinutes: 0, weekendMinutes: 0, dailyRequiredMinutes: 360,
+                                          startDate: "2026-09-01", endDate: "2026-09-30", maximumWorkMinutes: nil)
+        for (minutes, percent) in [(0, 0), (240, 50), (480, 100), (600, 125), (960, 200), (1200, 250)] {
+            let day = DailyRecord(date: minimumDay.date, start: minimumDay.start,
+                                  currentMinutes: minutes, holidayStatus: minimumDay.holidayStatus)
+            var fixedDay = AttendanceSnapshot(record: day, month: shortDayMonth,
+                                              remainingWorkDays: 0, updatedAt: evening)
+            fixedDay.dailyTargetMinutes = 120
+            precondition(fixedDay.todayMeter.targetMinutes == 480 && fixedDay.todayMeter.percent == percent,
+                         "Daily progress must use eight hours even with short schedules or completed monthly requirements")
+        }
         precondition(snapshot.monthMeter.actualMinutes == 8664)
         precondition(snapshot.monthMeter.targetMinutes == 7920)
         precondition(!SavedCookie(HTTPCookie(properties: [.name: "x", .value: "y", .domain: "example.com", .path: "/"])!).belongsToWantedSpace)

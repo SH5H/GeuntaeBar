@@ -281,14 +281,14 @@ struct MenuTests {
             return (bitmap, texts)
         }
 
-        // Four hours against a six-hour minimum fills 2/3, rather than the fixed eight-hour 1/2.
+        // Daily progress uses eight hours, independently of the remaining monthly requirement.
         let working = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 240, holidayStatus: workday)
         let (_, decimalTexts) = try await render(working, required: 7610, name: "daily-required")
         precondition(decimalTexts.joined().contains("3.4시간"), decimalTexts.joined())
         let (_, texts) = try await render(working, name: "working")
-        precondition(texts.joined().contains("67%달성"))
-        precondition(texts.joined().contains("최소6시간0분"))
+        precondition(texts.joined().contains("50%달성"))
+        precondition(texts.joined().contains("기준8시간0분"))
         precondition(texts.joined().contains("예상퇴근18:00"))
         precondition(texts.joined().contains("필수시간대비94%"))
         precondition(texts.joined().contains("최대160시간0분"))
@@ -308,19 +308,19 @@ struct MenuTests {
         try VNImageRequestHandler(cgImage: summaryImage).perform([summaryRequest])
         let summaryText = (summaryRequest.results ?? []).compactMap { $0.topCandidates(1).first?.string }
             .joined().filter { !$0.isWhitespace }
-        precondition(summaryText.contains("167%"), summaryText)
+        precondition(summaryText.contains("125%"), summaryText)
 
 
         let reached = DailyRecord(date: date, start: start, scheduledEnd: scheduledEnd,
                                   currentMinutes: 480, holidayStatus: workday)
         let (_, reachedTexts) = try await render(reached, name: "reached")
-        precondition(reachedTexts.joined().contains("133%"))
+        precondition(reachedTexts.joined().contains("100%달성"))
         let (_, zeroTexts) = try await render(working, required: 6600, name: "zero-target")
-        precondition(zeroTexts.joined().contains("이번달필수시간달성"))
+        precondition(zeroTexts.joined().contains("50%달성"))
 
         let offDay = DailyRecord(date: date, workedMinutes: 240, holidayStatus: "HOLIDAY_WORKING_OFF_NONE_NONE")
         let (_, offTexts) = try await render(offDay, days: 0, name: "no-workdays")
-        precondition(offTexts.joined().contains("남은근무일없음"))
+        precondition(offTexts.joined().contains("50%달성"))
 
         let before = DailyRecord(date: date, scheduledEnd: scheduledEnd, holidayStatus: workday)
         let (_, beforeTexts) = try await render(before, name: "before-clock-in")
@@ -339,13 +339,14 @@ struct MenuTests {
         let (achievedImage, _) = try await render(before, required: 6900, name: "before-achieved")
         let achievedText = try calendarText(achievedImage)
         precondition(achievedText.contains("달성"), achievedText)
-        let (unknownImage, _) = try await render(before, required: 7710, attendanceKnown: false, name: "unknown-attendance")
+        let (unknownImage, unknownTexts) = try await render(before, required: 7710, attendanceKnown: false, name: "unknown-attendance")
         let unknownText = try calendarText(unknownImage)
         precondition(!unknownText.contains("필요") && !unknownText.contains("달성"), unknownText)
+        precondition(!unknownTexts.joined().contains("%달성"))
         let ended = DailyRecord(date: date, start: start, end: "2026-10-01T13:00:00+09:00",
                                 scheduledEnd: scheduledEnd, workedMinutes: 240, holidayStatus: workday)
         let (_, endedTexts) = try await render(ended, days: 1, name: "after-clock-out")
-        precondition(endedTexts.joined().contains("67%달성") && endedTexts.joined().contains("퇴근13:00"))
+        precondition(endedTexts.joined().contains("50%달성") && endedTexts.joined().contains("퇴근13:00"))
 
         let overnight = DailyRecord(date: "2026-09-30", start: "2026-09-30T15:00:00+09:00",
                                     scheduledEnd: "2026-09-30T18:00:00+09:00",
@@ -357,7 +358,7 @@ struct MenuTests {
                                           maximumWorkMinutes: 9600)
         let (_, overnightTexts) = try await render(overnight, days: 0, report: previousMonth, name: "overnight")
         precondition(overnightTexts.joined().contains("2026-09-30까지기준132시간0분"))
-        precondition(overnightTexts.joined().contains("최소12시간0분"))
+        precondition(overnightTexts.joined().contains("113%달성"))
 
         // Calendar boundaries must remain correct across leap years, six-row months and time zones.
         func calendarSnapshot(_ first: String, _ last: String, _ instant: String) -> AttendanceSnapshot {

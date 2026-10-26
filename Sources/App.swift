@@ -1409,30 +1409,29 @@ struct TodaySummary: View {
     let snapshot: AttendanceSnapshot
 
     var body: some View {
+        let meter = snapshot.todayMeter
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(snapshot.dayTitle).font(.subheadline.weight(.semibold))
                 Spacer()
-                if let minimum = snapshot.minimumTodayMeter {
-                    Text(minimum.targetMinutes > 0 ? "\(minimum.percent)% 달성" : "목표 달성")
+                if snapshot.attendanceKnown {
+                    Text("\(meter.percent)% 달성")
                         .font(.subheadline.weight(.semibold))
                 }
             }
             Text(AttendanceSnapshot.duration(snapshot.todayMinutes))
                 .font(.system(size: 26, weight: .bold, design: .rounded)).monospacedDigit()
-            if let minimum = snapshot.minimumTodayMeter {
-                Text("최소 \(AttendanceSnapshot.duration(minimum.targetMinutes))")
+            if snapshot.attendanceKnown {
+                Text("기준 \(AttendanceSnapshot.duration(meter.targetMinutes))")
                     .font(.caption).foregroundStyle(.secondary)
-                WorkProgressBar(fill: snapshot.minimumTodayFill, markers: [],
-                                value: minimum.targetMinutes > 0 ? "실제 \(minimum.percent)%" : "필수시간 달성",
-                                label: "\(snapshot.dayTitle) 최소 근무시간 진행률")
-                if minimum.targetMinutes == 0 {
-                    Text("\(snapshot.monthTitle) 필수시간 달성").font(.caption)
+                WorkProgressBar(fill: Double(meter.actualMinutes) / Double(meter.targetMinutes), markers: [],
+                                value: "8시간 기준 \(meter.percent)%",
+                                label: "\(snapshot.dayTitle) 근무시간 진행률")
+                if let leave = snapshot.record.flatMap({ snapshot.leaveByDate[$0.date] }) {
+                    Text(leave.title).font(.caption)
                 }
             } else {
-                Text(snapshot.attendanceKnown
-                     ? snapshot.record.flatMap { snapshot.leaveByDate[$0.date]?.title } ?? "남은 근무일 없음"
-                     : "진행률 확인 불가").font(.caption)
+                Text("진행률 확인 불가").font(.caption)
             }
             Text(snapshot.attendanceDescription).font(.caption)
             if let note = snapshot.attendanceNote {

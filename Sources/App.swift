@@ -73,10 +73,19 @@ final class Preferences {
         get { defaults.integer(forKey: "clockInReminderDelayMinutes") }
         set { defaults.set(newValue, forKey: "clockInReminderDelayMinutes") }
     }
-    func leaveByDate(for snapshot: AttendanceSnapshot) -> [String: LeaveType] {
+    func leaveByDate(for snapshot: AttendanceSnapshot) -> [String: LeaveOptions] {
         let key = "calendarLeave-\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)"
-        var leaves = defaults.data(forKey: key)
-            .flatMap { try? JSONDecoder().decode([String: LeaveType].self, from: $0) } ?? [:]
+        var leaves: [String: LeaveOptions] = [:]
+        if let data = defaults.data(forKey: key) {
+            if let saved = try? JSONDecoder().decode([String: LeaveOptions].self, from: data) {
+                leaves = saved
+            } else if let legacy = try? JSONDecoder().decode([String: LegacyLeave].self, from: data) {
+                leaves = legacy.mapValues {
+                    LeaveOptions(recognizesScheduledWork: true, recognizesOvertime: $0 == .paid)
+                }
+                setLeaveByDate(leaves, for: snapshot)
+            }
+        }
         if snapshot.service == .flex,
            let data = defaults.data(forKey: "customHolidayRule"),
            let legacy = try? JSONDecoder().decode(LegacyHoliday.self, from: data) {
@@ -87,7 +96,8 @@ final class Preferences {
                       month.calendar.component(.weekday, from: date) == legacy.weekday,
                       legacy.ordinals.contains((month.calendar.component(.day, from: date) - 1) / 7 + 1),
                       leaves[record.date] == nil else { continue }
-                leaves[record.date] = legacy.affectsCompensation == false ? .unpaid : .paid
+                leaves[record.date] = LeaveOptions(recognizesScheduledWork: true,
+                                                  recognizesOvertime: legacy.affectsCompensation != false)
             }
             setLeaveByDate(leaves, for: snapshot)
             defaults.removeObject(forKey: "customHolidayRule")
@@ -95,9 +105,14 @@ final class Preferences {
         return leaves
     }
 
-    func setLeaveByDate(_ leaves: [String: LeaveType], for snapshot: AttendanceSnapshot) {
+    func setLeaveByDate(_ leaves: [String: LeaveOptions], for snapshot: AttendanceSnapshot) {
         defaults.set(try? JSONEncoder().encode(leaves),
                      forKey: "calendarLeave-\(snapshot.service.rawValue)-\(snapshot.accountIdentifier)")
+    }
+
+    private enum LegacyLeave: String, Decodable {
+        case paid
+        case unpaid
     }
 
     private struct LegacyHoliday: Decodable {
@@ -422,13 +437,13 @@ final class WorkBarModel: ObservableObject {
         }
     }
 
-    func setLeave(_ type: LeaveType?, on date: String) {
+    func setLeave(_ options: LeaveOptions?, on date: String) {
         guard loginCompleted, !isSigningOut, let raw = fetchedSnapshot,
               raw.service == selectedService,
               date >= raw.month.startDate, date <= raw.month.endDate,
               raw.calendarRecords.contains(where: { $0.date == date }) else { return }
         var leaves = preferences.leaveByDate(for: raw)
-        leaves[date] = type
+        leaves[date] = options
         preferences.setLeaveByDate(leaves, for: raw)
         snapshot = raw.applyingLeave(leaves)
         advanceLiveTime()
@@ -1249,7 +1264,7 @@ struct CalendarDayDetail {
 struct AttendanceCalendarView: View {
     let snapshot: AttendanceSnapshot
     let canEditLeave: Bool
-    let setLeave: (LeaveType?, String) -> Void
+    let setLeave: (LeaveOptions?, String) -> Void
     @State private var displayedMonth: Date?
     @State private var selectedDate: Date?
 
@@ -1312,7 +1327,6 @@ struct AttendanceCalendarView: View {
             HStack(spacing: 14) {
                 Label("근무", systemImage: "circle.fill").foregroundStyle(WorkProgressBar.confirmedColor)
                 Label("진행 중", systemImage: "circle.fill").foregroundStyle(.orange)
-                Text("— 기록 없음").foregroundStyle(.secondary)
             }
             .font(.system(size: 10))
             Divider()
@@ -1338,7 +1352,7 @@ struct AttendanceCalendarView: View {
                     .font(.system(size: 13, weight: selected || today ? .bold : .medium, design: .rounded))
                     .foregroundStyle(selected ? Color.white : detail.holiday != nil ? .red : .primary)
                 Text(detail.minutes.map { String(format: "%d:%02d", $0 / 60, $0 % 60) }
-                     ?? snapshot.leaveByDate[key].map { $0 == .paid ? "유급" : "무급" }
+                     ?? snapshot.leaveByDate[key].map { _ in "휴가" }
                      ?? remaining.map { $0 > 0 ? String(format: "-%d:%02d", $0 / 60, $0 % 60) : "달성" }
                      ?? (detail.status == "휴무" || detail.holiday != nil ? "휴무" : "—"))
                     .font(.system(size: 9, weight: .medium)).monospacedDigit()
@@ -1385,18 +1399,10 @@ struct AttendanceCalendarView: View {
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 .help(detail.holiday ?? "")
             HStack {
-                Picker("휴가", selection: Binding(
-                    get: { snapshot.leaveByDate[detail.key] },
-                    set: { setLeave($0, detail.key) })) {
-                    ForEach(LeaveType.allCases, id: \.self) { type in
-                        Text(type == .paid ? "소정근로시간 인정 제외" : "초과근로 산정 반영 제외")
-                            .tag(Optional(type))
-                    }
+                VStack(alignment: .leading, spacing: 4) {
+                    leavePicker("소정근로시간", field: \.recognizesScheduledWork, date: detail.key)
+                    leavePicker("초과근로 산정", field: \.recognizesOvertime, date: detail.key)
                 }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                .controlSize(.small)
-                .accessibilityLabel("\(detail.key) 휴가")
                 Button("휴가 없음") { setLeave(nil, detail.key) }
                     .disabled(snapshot.leaveByDate[detail.key] == nil)
             }
@@ -1408,6 +1414,29 @@ struct AttendanceCalendarView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 160, alignment: .top)
+    }
+
+    private func leavePicker(_ title: String, field: WritableKeyPath<LeaveOptions, Bool>, date: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title).font(.caption).frame(width: 80, alignment: .leading)
+            Picker(title, selection: Binding<Bool?>(
+                get: { snapshot.leaveByDate[date].map { $0[keyPath: field] } },
+                set: { value in
+                    if let value {
+                        var options = snapshot.leaveByDate[date] ?? LeaveOptions()
+                        options[keyPath: field] = value
+                        setLeave(options, date)
+                    }
+                })) {
+                    Text("인정").tag(Optional(true))
+                    Text("제외").tag(Optional(false))
+                }
+                .pickerStyle(.radioGroup)
+                .horizontalRadioGroupLayout()
+                .labelsHidden()
+                .controlSize(.small)
+                .accessibilityLabel("\(date) \(title)")
+        }
     }
 }
 

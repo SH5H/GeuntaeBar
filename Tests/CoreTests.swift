@@ -398,28 +398,40 @@ struct CoreTests {
         raw.liveWorkClock = LiveWorkClock(start: raw.updatedAt.addingTimeInterval(-7200), completedMinutes: 0,
             rests: [], countsTowardTarget: true)
         raw.compensationEstimate = CompensationEstimate(month: month, days: [], holidays: [:])
-        let paid = raw.applyingLeave(["2026-10-26": .paid, "2026-10-27": .unpaid, "2026-11-01": .paid])
-        precondition(paid.month.requiredMinutes == 0 && paid.month.maximumWorkMinutes == 480)
-        precondition(paid.compensationEstimate?.thresholdMinutes == 480)
-        precondition(paid.remainingWorkDays == 0 && paid.dailyTargetMinutes == 0 && !paid.remindersAvailable)
-        precondition(paid.todayMinutes == raw.todayMinutes && paid.month.workedMinutes == raw.month.workedMinutes)
-        precondition(paid.leaveDeduction?.dates == ["2026-10-26", "2026-10-27"])
-        precondition(paid.leaveDeduction?.minutes == 960 && paid.leaveDeduction?.maximumMinutes == 960)
-        precondition(paid.remainingWorkDaysAfterToday == 0 && paid.minimumTodayMeter == nil)
+        let recognized = LeaveOptions(recognizesScheduledWork: true, recognizesOvertime: true)
+        let scheduledOnly = LeaveOptions(recognizesScheduledWork: true, recognizesOvertime: false)
+        let adjusted = raw.applyingLeave(["2026-10-26": recognized, "2026-10-27": scheduledOnly, "2026-11-01": recognized])
+        precondition(adjusted.month.requiredMinutes == 0 && adjusted.month.maximumWorkMinutes == 480)
+        precondition(adjusted.compensationEstimate?.thresholdMinutes == 480)
+        precondition(adjusted.remainingWorkDays == 0 && adjusted.dailyTargetMinutes == 0 && !adjusted.remindersAvailable)
+        precondition(adjusted.todayMinutes == raw.todayMinutes && adjusted.month.workedMinutes == raw.month.workedMinutes)
+        precondition(adjusted.leaveDeduction?.dates == ["2026-10-26", "2026-10-27"])
+        precondition(adjusted.leaveDeduction?.minutes == 960 && adjusted.leaveDeduction?.maximumMinutes == 960)
+        precondition(adjusted.remainingWorkDaysAfterToday == 0 && adjusted.minimumTodayMeter == nil)
         var holidaySnapshot = raw
         holidaySnapshot.calendarHolidays["2026-10-27"] = CompanyHoliday(name: "공휴일")
-        let holidayLeave = holidaySnapshot.applyingLeave(["2026-10-27": .paid])
+        let holidayLeave = holidaySnapshot.applyingLeave(["2026-10-27": recognized])
         precondition(holidayLeave.month.requiredMinutes == raw.month.requiredMinutes)
-        precondition(holidayLeave.leaveByDate["2026-10-27"] == .paid && holidayLeave.leaveDeduction?.minutes == nil)
-        let fullLeave = raw.applyingLeave(["2026-10-25": .paid])
+        precondition(holidayLeave.leaveByDate["2026-10-27"] == recognized && holidayLeave.leaveDeduction?.minutes == nil)
+        let fullLeave = raw.applyingLeave(["2026-10-25": recognized])
         precondition(fullLeave.month.requiredMinutes == raw.month.requiredMinutes)
-        precondition(fullLeave.leaveByDate["2026-10-25"] == .paid && fullLeave.leaveDeduction?.minutes == nil)
-        var advanced = paid
+        precondition(fullLeave.leaveByDate["2026-10-25"] == recognized && fullLeave.leaveDeduction?.minutes == nil)
+        var advanced = adjusted
         advanced.advanceLiveTime(to: raw.updatedAt.addingTimeInterval(60))
         precondition(advanced.todayMinutes == 121)
         precondition(raw.applyingLeave([:]).month.requiredMinutes == 960)
-        let unpaid = raw.applyingLeave(["2026-10-27": .unpaid])
-        precondition(unpaid.month.requiredMinutes == 480 && unpaid.compensationEstimate?.thresholdMinutes == 960)
+        for scheduled in [false, true] {
+            for overtime in [false, true] {
+                let options = LeaveOptions(recognizesScheduledWork: scheduled, recognizesOvertime: overtime)
+                let leave = raw.applyingLeave([future.date: options])
+                precondition(leave.month.requiredMinutes == 960 - (scheduled ? 480 : 0))
+                precondition(leave.month.maximumWorkMinutes == 1440 - (scheduled ? 480 : 0))
+                precondition(leave.compensationEstimate?.thresholdMinutes == 960 - (overtime ? 480 : 0))
+                precondition(leave.remainingWorkDays == 0 && leave.calendarRecords.last?.isScheduledWorkday == false)
+                precondition(leave.todayMinutes == raw.todayMinutes && leave.month.workedMinutes == raw.month.workedMinutes)
+                precondition(leave.leaveDeduction?.minutes == (scheduled ? 480 : nil))
+            }
+        }
         let ended = DailyRecord(date: today.date, start: today.start, end: "2026-10-26T12:00:00+09:00",
             scheduledEnd: today.scheduledEnd, workedMinutes: 120, holidayStatus: today.holidayStatus)
         var early = AttendanceSnapshot(record: ended, month: month, remainingWorkDays: 1,
@@ -427,7 +439,7 @@ struct CoreTests {
         early.timeZone = raw.timeZone
         early.calendarRecords = [ended, future]
         early.calendarRequiredMinutes = raw.calendarRequiredMinutes
-        let endedLeave = early.applyingLeave([today.date: .paid])
+        let endedLeave = early.applyingLeave([today.date: recognized])
         precondition(endedLeave.remainingWorkDaysAfterToday == 1,
                      "A completed shift must not remove another future workday")
         precondition(endedLeave.record?.workedMinutes == 120 && endedLeave.record?.isScheduledWorkday == false)
@@ -538,7 +550,8 @@ struct CoreTests {
         precondition(after.expectedMinutesByNow == before.expectedMinutesByNow)
         precondition(after.remainingWorkDays == 2)
         precondition(after.calendarRequiredMinutes["2026-10-03"] == 480)
-        let wantedLeave = after.applyingLeave(["2026-10-03": .paid])
+        let wantedLeave = after.applyingLeave(["2026-10-03": LeaveOptions(recognizesScheduledWork: true,
+                                                                      recognizesOvertime: true)])
         precondition(wantedLeave.leaveDeduction?.dates == ["2026-10-03"])
         precondition(wantedLeave.leaveDeduction?.minutes == 480)
         precondition(wantedLeave.month.requiredMinutes == after.month.requiredMinutes - 480)

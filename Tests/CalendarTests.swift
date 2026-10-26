@@ -30,12 +30,14 @@ struct CalendarTests {
         let model = WorkBarModel(wantedSpace: backend, defaults: defaults)
         let refreshed = await model.refresh()
         precondition(refreshed)
-        model.setLeave(.paid, on: "2026-10-28")
+        let recognized = LeaveOptions(recognizesScheduledWork: true, recognizesOvertime: true)
+        let scheduledOnly = LeaveOptions(recognizesScheduledWork: true, recognizesOvertime: false)
+        model.setLeave(recognized, on: "2026-10-28")
         precondition(model.snapshot?.month.targetMinutes == 9120)
         precondition(model.snapshot?.compensationEstimate?.thresholdMinutes == 9120)
         precondition(model.snapshot?.remainingWorkDaysAfterToday == 3)
         precondition(model.snapshot?.remainingRequiredWorkDays == 4 && model.snapshot?.dailyRequiredHours == 8)
-        model.setLeave(.unpaid, on: "2026-10-28")
+        model.setLeave(scheduledOnly, on: "2026-10-28")
         precondition(model.snapshot?.month.targetMinutes == 9120)
         precondition(model.snapshot?.compensationEstimate?.thresholdMinutes == 9600)
         precondition(model.snapshot?.month.maximumWorkMinutes == 11520)
@@ -44,22 +46,42 @@ struct CalendarTests {
 
         let reopened = WorkBarModel(wantedSpace: backend, defaults: defaults)
         _ = await reopened.refresh()
-        precondition(reopened.snapshot?.leaveByDate["2026-10-28"] == .unpaid)
+        precondition(reopened.snapshot?.leaveByDate["2026-10-28"] == scheduledOnly)
         precondition(reopened.snapshot?.month.targetMinutes == 9120)
         loaded.accountIdentifier = "account-B"
         _ = await reopened.refresh()
         precondition(reopened.snapshot?.month.targetMinutes == 9600 && reopened.snapshot?.leaveByDate.isEmpty == true)
         loaded = raw
         _ = await reopened.refresh()
-        precondition(reopened.snapshot?.leaveByDate["2026-10-28"] == .unpaid)
+        precondition(reopened.snapshot?.leaveByDate["2026-10-28"] == scheduledOnly)
+        for overtime in [false, true] {
+            let options = LeaveOptions(recognizesOvertime: overtime)
+            reopened.setLeave(options, on: "2026-10-28")
+            let restored = WorkBarModel(wantedSpace: backend, defaults: defaults)
+            _ = await restored.refresh()
+            precondition(restored.snapshot?.leaveByDate["2026-10-28"] == options)
+            precondition(restored.snapshot?.month.targetMinutes == 9600)
+            precondition(restored.snapshot?.month.maximumWorkMinutes == 12000)
+            precondition(restored.snapshot?.compensationEstimate?.thresholdMinutes == (overtime ? 9120 : 9600))
+            precondition(restored.snapshot?.remainingWorkDaysAfterToday == 3)
+        }
         reopened.setLeave(nil, on: "2026-10-28")
         precondition(reopened.snapshot?.month.targetMinutes == 9600 && reopened.snapshot?.remainingWorkDaysAfterToday == 4)
         precondition(reopened.snapshot?.compensationEstimate?.thresholdMinutes == 9600)
-        reopened.setLeave(.paid, on: "2026-11-01")
+        reopened.setLeave(recognized, on: "2026-11-01")
         precondition(reopened.snapshot?.month.targetMinutes == 9600)
 
         let preferences = Preferences(defaults: defaults)
-        preferences.setLeaveByDate(["2026-10-28": .paid], for: raw)
+        let storageKey = "calendarLeave-\(raw.service.rawValue)-\(raw.accountIdentifier)"
+        defaults.set(Data(#"{"2026-10-27":"paid","2026-10-28":"unpaid"}"#.utf8), forKey: storageKey)
+        let legacyLeaves = preferences.leaveByDate(for: raw)
+        precondition(legacyLeaves == ["2026-10-27": recognized, "2026-10-28": scheduledOnly])
+        let storedLeaves = try JSONDecoder().decode([String: LeaveOptions].self, from: defaults.data(forKey: storageKey)!)
+        precondition(storedLeaves == legacyLeaves)
+        let legacySnapshot = raw.applyingLeave(legacyLeaves)
+        precondition(legacySnapshot.month.targetMinutes == 8640)
+        precondition(legacySnapshot.compensationEstimate?.thresholdMinutes == 9120)
+        preferences.setLeaveByDate(["2026-10-28": recognized], for: raw)
         var flex = raw
         flex.service = .flex
         precondition(preferences.leaveByDate(for: flex).isEmpty, "A different attendance service must not inherit leave")
@@ -77,7 +99,7 @@ struct CalendarTests {
         }
         _ = await reopened.refresh()
         let originalSize = size()
-        reopened.setLeave(.paid, on: current.date)
+        reopened.setLeave(recognized, on: current.date)
         precondition(reopened.snapshot?.minimumTodayMeter == nil, "A leave day must not retain a minimum work target")
         precondition(size() == originalSize)
         loaded.calendarHolidays[current.date] = CompanyHoliday(name: String(repeating: "긴 휴일 이름 ", count: 20))
@@ -86,6 +108,6 @@ struct CalendarTests {
         loaded.record = nil
         _ = await reopened.refresh()
         precondition(size() == originalSize)
-        print("Calendar leave persistence, account isolation, undo and stable layout checks passed")
+        print("Calendar leave options, migration, persistence, account isolation, undo and stable layout checks passed")
     }
 }

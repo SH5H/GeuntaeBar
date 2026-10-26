@@ -413,7 +413,7 @@ struct MenuTests {
             precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: key).remainingRequiredMinutes == nil,
                          "Only known, unattended workdays may show the daily requirement")
         }
-        calendarSnapshot.leaveByDate["2026-10-05"] = .paid
+        calendarSnapshot.leaveByDate["2026-10-05"] = LeaveOptions()
         precondition(CalendarDayDetail(snapshot: calendarSnapshot, key: "2026-10-05").remainingRequiredMinutes == nil)
         calendarSnapshot.leaveByDate.removeAll()
         calendarSnapshot.month.workedMinutes = 9700

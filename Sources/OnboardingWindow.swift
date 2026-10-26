@@ -13,7 +13,7 @@ struct OnboardingWindow: View {
         "아래에서 평소 사용하던 계정으로 로그인해주세요. 로그인은 나중에 하고 기능부터 둘러볼 수도 있어요.",
         "월간 막대는 최대 근무 가능 시간까지 펼쳐져요. 세 가지 색의 선과 아래 설명으로 각 기준을 확인해요.",
         "월간 막대의 보라색 선은 필수시간을 채운 뒤 리프레시 데이를 반영한 수당 기준이에요. 실제 수당은 신청·승인과 급여 정산에 따라 달라져요.",
-        "달력에서 날짜를 누른 뒤 유급·무급 휴가를 선택하세요. 두 휴가 모두 근무일과 필수·최대시간에서 빠지고, 유급 휴가만 수당 기준도 낮춰요. 회사 시스템에 휴가를 신청하지는 않아요.",
+        "달력에서 날짜를 누른 뒤 직접 지정 휴가의 소정근로시간과 초과근로 산정을 각각 인정·제외로 선택하세요. 소정근로시간 인정은 필수·최대시간을, 초과근로 산정 인정은 수당 기준을 낮춰요. 회사에 휴가를 신청하지는 않아요.",
         "출근 기록이 없으면 알려드려요. 패널 상단의 톱니바퀴로 옵션 창을 열어 알림을 켜고 끄거나 기준과 지연 시간을 바꿀 수 있어요."
     ]
     private let symbols = ["menubar.rectangle", "person.crop.circle", "chart.bar.xaxis", "calendar.badge.clock", "calendar.badge.minus", "bell.badge"]
@@ -224,7 +224,7 @@ struct OnboardingWindow: View {
                 .foregroundStyle(.secondary)
         case 4:
             Label("달력에서 날짜 선택", systemImage: "calendar")
-            Label("휴가 없음 · 유급 휴가 · 무급 휴가", systemImage: "checkmark.circle")
+            Label("소정근로시간 · 초과근로 산정 각각 인정·제외", systemImage: "checkmark.circle")
             Divider()
             Text("선택은 이 Mac에 저장되며 근태 서비스·계정별로 구분해요. ‘휴가 없음’을 선택하면 앱에서 지정한 휴가만 해제돼요.")
                 .font(.callout)

@@ -294,11 +294,11 @@ struct LiveWorkClock {
     }
 }
 
-enum LeaveType: String, Codable, CaseIterable {
-    case paid
-    case unpaid
+struct LeaveOptions: Codable, Equatable {
+    var recognizesScheduledWork = false
+    var recognizesOvertime = false
 
-    var title: String { self == .paid ? "유급 휴가" : "무급 휴가" }
+    var title: String { "직접 지정 휴가" }
 }
 
 struct ClockInReminderPlan {
@@ -381,19 +381,19 @@ struct AttendanceSnapshot {
     var expectedClockOut: Date? = nil
     var liveWorkClock: LiveWorkClock? = nil
     var serverClockOffset: TimeInterval = 0
-    var leaveByDate: [String: LeaveType] = [:]
+    var leaveByDate: [String: LeaveOptions] = [:]
     var calendarRequiredMinutes: [String: Int] = [:]
     var leaveDeduction: LeaveDeduction? = nil
 
-    func applyingLeave(_ leaves: [String: LeaveType]) -> AttendanceSnapshot {
+    func applyingLeave(_ leaves: [String: LeaveOptions]) -> AttendanceSnapshot {
         var snapshot = self
         snapshot.leaveByDate = leaves
         let today = record?.date ?? calendarDate
         var deductions = 0
-        var paidDeductions = 0
+        var overtimeDeductions = 0
         var excludedDays = 0
         var deductedDates: [String] = []
-        for (date, type) in leaves where date >= month.startDate && date <= month.endDate {
+        for (date, options) in leaves where date >= month.startDate && date <= month.endDate {
             if let index = calendarRecords.firstIndex(where: { $0.date == date }) {
                 let original = record?.date == date ? record! : calendarRecords[index]
                 excludedDays += Self.remainingScheduledDays(in: [original], during: month,
@@ -403,9 +403,11 @@ struct AttendanceSnapshot {
             }
             guard let required = calendarRequiredMinutes[date], required > 0,
                   calendarHolidays[date] == nil else { continue }
-            deductions += required
-            deductedDates.append(date)
-            if type == .paid { paidDeductions += required }
+            if options.recognizesScheduledWork {
+                deductions += required
+                deductedDates.append(date)
+            }
+            if options.recognizesOvertime { overtimeDeductions += required }
         }
         snapshot.month.requiredMinutes = max(0, month.requiredMinutes - deductions)
         if let maximum = month.maximumWorkMinutes {
@@ -413,7 +415,7 @@ struct AttendanceSnapshot {
         }
         snapshot.remainingWorkDays = max(0, remainingWorkDays - excludedDays)
         snapshot.compensationEstimate?.thresholdMinutes =
-            max(0, (compensationEstimate?.thresholdMinutes ?? 0) - paidDeductions)
+            max(0, (compensationEstimate?.thresholdMinutes ?? 0) - overtimeDeductions)
         snapshot.leaveDeduction = deductions > 0
             ? LeaveDeduction(dates: deductedDates.sorted(),
                              minutes: month.targetMinutes - snapshot.month.targetMinutes,

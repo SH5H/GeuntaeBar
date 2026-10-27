@@ -888,7 +888,7 @@ struct LaunchLabel: View {
         Image(nsImage: Self.progressImage(snapshot: model.snapshot))
             .renderingMode(.original)
             .help(progressDescription)
-            .accessibilityLabel("\(model.snapshot?.dayTitle ?? "오늘") 최소 근무시간 진행률 및 목표 초과 시간")
+            .accessibilityLabel("\(model.snapshot?.dayTitle ?? "오늘") 누적 근무시간 · 한 칸 1시간, 한 바퀴 8시간")
             .accessibilityValue(progressDescription)
             .onAppear {
                 if rightClickMonitor == nil {
@@ -935,18 +935,13 @@ struct LaunchLabel: View {
     }
 
     static func progressImage(snapshot: AttendanceSnapshot?) -> NSImage {
-        let meter = snapshot?.minimumTodayMeter
         let attendanceKnown = snapshot?.attendanceKnown == true
         let started = attendanceKnown && snapshot?.record?.start?.isEmpty == false
         let finished = started && snapshot?.record?.end?.isEmpty == false
         let waiting = attendanceKnown && snapshot?.record != nil && !started
         let actual = started ? max(0, snapshot?.todayMinutes ?? 0) : 0
-        let fallback = snapshot?.dailyTargetMinutes.flatMap { $0 > 0 ? $0 : nil }
-            ?? snapshot?.month.dailyRequiredMinutes
-        let target = max(0, meter.flatMap { $0.targetMinutes > 0 ? $0.targetMinutes : nil }
-            ?? (attendanceKnown ? fallback : nil) ?? 0)
         let hours = 8
-        let colors: [NSColor] = attendanceKnown && (meter != nil || started && target > 0)
+        let colors: [NSColor] = attendanceKnown
             ? [.systemGreen, .systemYellow, .systemRed] : [.secondaryLabelColor]
         let segment = 360 / CGFloat(hours)
         let gap: CGFloat = hours > 1 ? 10 : 0
@@ -965,9 +960,9 @@ struct LaunchLabel: View {
                 NSColor.white.setFill()
                 arc(hour, 1, inner: finished ? 7 : 4.5)
                 if waiting { continue }
-                let capacity = Double(target > 0 ? target : 480) / Double(hours)
+                let capacity = 60.0
                 for (lap, color) in colors.enumerated() {
-                    let lapTarget = Double(target > 0 ? target : 480)
+                    let lapTarget = capacity * Double(hours)
                     let minutes = min(capacity, max(0, Double(actual) - Double(lap) * lapTarget - Double(hour) * capacity))
                     guard minutes > 0 else { continue }
                     color.setFill()
